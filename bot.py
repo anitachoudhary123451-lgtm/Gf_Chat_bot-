@@ -7,6 +7,7 @@ import time
 
 from flask import Flask
 import telebot
+from telebot.types import InputMediaPhoto, InputMediaVideo
 
 # ============================================================
 # ENVIRONMENT & CONFIGURATION
@@ -17,7 +18,8 @@ ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
 
 DATA_FILE = "bot_data.json"
-AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante (21600 seconds)
+AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
+AUTO_REBLUR_SECONDS = 12        # 12 Second baad apne aap fresh blur replace hoga
 
 if not TOKEN:
     raise RuntimeError("BOT_TOKEN environment variable is not set!")
@@ -30,21 +32,10 @@ try:
 except ValueError:
     raise RuntimeError("ADMIN_ID must be a valid integer!")
 
-bot = telebot.TeleBot(
-    TOKEN,
-    parse_mode="HTML"
-)
-
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 db_lock = Lock()
 
-# ============================================================
-# LOGGING
-# ============================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 # ============================================================
 # WEB SERVER / KEEP ALIVE
@@ -57,10 +48,7 @@ def home():
     return "⚡ Gateway Service Active ✅", 200
 
 def run_flask():
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 # ============================================================
 # DATABASE CORE
@@ -81,10 +69,7 @@ def empty_db():
 def ensure_user(data, user_id):
     user_id = str(user_id)
     if user_id not in data["users"]:
-        data["users"][user_id] = {
-            "admin_msgs": [],
-            "user_msgs": []
-        }
+        data["users"][user_id] = {"admin_msgs": [], "user_msgs": []}
 
 def ensure_protected_user(data):
     if PROTECTED_USER_ID:
@@ -96,23 +81,16 @@ def load_data():
             data = empty_db()
             ensure_protected_user(data)
             return data
-
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-
             for key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a", "blocked", "alerts"]:
                 if key not in data:
-                    if key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a"]:
-                        data[key] = {}
-                    else:
-                        data[key] = []
-
+                    data[key] = {} if key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a"] else []
             data.setdefault("selected_user", None)
             data.setdefault("auto_delete", [])
             ensure_protected_user(data)
             return data
-
         except Exception as e:
             logging.error("DB Load Error: %s", e)
             data = empty_db()
@@ -129,10 +107,31 @@ def save_data(data):
         except Exception as e:
             logging.error("DB Save Error: %s", e)
 
-SUPPORTED_TYPES = [
-    "text", "photo", "video", "document",
-    "audio", "voice", "sticker", "animation"
-]
+SUPPORTED_TYPES = ["text", "photo", "video", "document", "audio", "voice", "sticker", "animation"]
+
+# ============================================================
+# BACKGROUND AUTO RE-BLUR REPLACEMENT WORKER
+# ============================================================
+
+def auto_reblur_media(chat_id, message_id, media_type, file_id, caption):
+    """User ke dekhne ke time ke baad khud fresh blurred media replace karega"""
+    time.sleep(AUTO_REBLUR_SECONDS)
+    try:
+        if media_type == "photo":
+            bot.edit_message_media(
+                chat_id=chat_id,
+                message_id=message_id,
+                media=InputMediaPhoto(media=file_id, caption=caption, has_spoiler=True)
+            )
+        elif media_type == "video":
+            bot.edit_message_media(
+                chat_id=chat_id,
+                message_id=message_id,
+                media=InputMediaVideo(media=file_id, caption=caption, has_spoiler=True)
+            )
+        logging.info("Auto re-blur replacement completed for msg: %s", message_id)
+    except Exception as e:
+        logging.debug("Re-blur edit error: %s", e)
 
 # ============================================================
 # BACKGROUND AUTO-DELETE WORKER (6 GHANTE TIMER)
@@ -164,7 +163,6 @@ def auto_delete_worker():
             if modified:
                 data["auto_delete"] = remaining
                 save_data(data)
-
         except Exception as e:
             logging.error("Auto delete worker error: %s", e)
 
@@ -178,46 +176,32 @@ def handle_start(message):
     data = load_data()
 
     if chat_id == ADMIN_ID:
-        selected = (f"<code>{data['selected_user']}</code>" if data.get("selected_user") else "⭕ <i>None (Manual/Reply Mode)</i>")
-        protected_label = f"<code>{PROTECTED_USER_ID}</code>" if PROTECTED_USER_ID else "<i>None</i>"
+        selected = f"<code>{data['selected_user']}</code>" if data.get("selected_user") else "⭕ <i>None (Manual/Reply Mode)</i>"
         panel = f"""
 🎛️ <b>CONTROL CONSOLE | ADMIN</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 <b>Focused Target:</b> {selected}
-🛡️ <b>Protected User ID:</b> {protected_label}
+🛡️ <b>Protected ID:</b> <code>{PROTECTED_USER_ID or 'None'}</code>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📡 <b>ROUTING & MESSAGING:</b>
-• <b>Reply directly</b> to any forwarded user message to quote-reply.
-• <code>/select &lt;user_id&gt;</code>
-  └─ Lock focus to a specific user
-• <code>/unselect</code>
-  └─ Release locked focus
-• <code>/dm &lt;id&gt; &lt;text&gt;</code>
-  └─ Send standalone message (copy protected)
+• <b>Reply directly</b> to any forwarded user message.
+• <code>/select &lt;user_id&gt;</code> ── Lock focus
+• <code>/unselect</code> ── Release focus
+• <code>/dm &lt;id&gt; &lt;text&gt;</code> ── Send message
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹 <b>PURGE & DELETION:</b>
-• <code>/wipe &lt;id&gt;</code>
-  └─ <b>100% Instant Wipe:</b> User chat screen se user + admin messages gayab
-• <code>/clearall &lt;id&gt;</code>
-  └─ Delete Admin messages from user chat
-• <code>/purge &lt;id&gt;</code>
-  └─ Wipe known user + admin messages & mappings
-• <code>/resetdb</code>
-  └─ Reset database and session mappings
+• <code>/wipe &lt;id&gt;</code> ── 100% Instant Wipe (User + Admin msgs)
+• <code>/clearall &lt;id&gt;</code> ── Delete Admin msgs
+• <code>/purge &lt;id&gt;</code> ── Wipe all history + mappings
+• <code>/resetdb</code> ── Reset DB state
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 <b>MANAGEMENT:</b>
-• <code>/users</code>
-  └─ List all users
-• <code>/userprofile &lt;id&gt;</code>
-  └─ Open Telegram profile
-• <code>/ban &lt;id&gt;</code>
-  └─ Block user
-• <code>/unban &lt;id&gt;</code>
-  └─ Restore user access
-• <code>/alert &lt;id&gt;</code>
-  └─ Toggle priority flag
+• <code>/users</code> ── List all users
+• <code>/userprofile &lt;id&gt;</code> ── Open profile
+• <code>/ban &lt;id&gt;</code> | <code>/unban &lt;id&gt;</code>
+• <code>/alert &lt;id&gt;</code> ── Flag / Unflag
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 <i>User Protection: Screenshot, screen record, save aur forward sab locked hai. Admin messages 6 hrs me auto-delete hote hain.</i>
+🔒 <i>Protection: Photos/Videos automatically re-blur without buttons. Screenshots/saving fully blocked. All admin msgs auto-delete in 6 hrs.</i>
 """
         bot.send_message(ADMIN_ID, panel)
         return
@@ -233,9 +217,7 @@ def handle_start(message):
 🔒 <b>ENCRYPTED SECURE CHANNEL</b>
 <blockquote>
 Aapka direct communication session establish ho chuka hai.
-Aap yahan apna koi bhi message, photo,
-video ya document bhej sakte hain.
-Hamaari team aapse isi chat me connect karegi.
+Aap yahan apna koi bhi message, photo, video ya document bhej sakte hain.
 </blockquote>
 💬 <i>Apna sandesh niche type karke send karein.</i>
 """
@@ -247,42 +229,35 @@ Hamaari team aapse isi chat me connect karegi.
 
 @bot.message_handler(commands=["wipe"])
 def wipe_chat(message):
-    if message.chat.id != ADMIN_ID:
-        return
+    if message.chat.id != ADMIN_ID: return
     try:
         user_id = message.text.split()[1]
     except IndexError:
         data = load_data()
         user_id = data.get("selected_user")
         if not user_id:
-            bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/wipe &lt;user_id&gt;</code>")
-            return
+            bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/wipe &lt;user_id&gt;</code>"); return
 
     user_id = str(user_id)
     data = load_data()
     if user_id not in data["users"]:
-        bot.send_message(ADMIN_ID, "⚠️ User history not found.")
-        return
+        bot.send_message(ADMIN_ID, "⚠️ User history not found."); return
 
     user_msgs = list(data["users"][user_id].get("user_msgs", []))
     admin_msgs = list(data["users"][user_id].get("admin_msgs", []))
     total = 0
 
-    # User ke khud ke messages user chat se delete
     for msg_id in user_msgs:
         try:
             bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))
             total += 1
-        except Exception:
-            pass
+        except Exception: pass
 
-    # Admin ke messages user chat se delete
     for msg_id in admin_msgs:
         try:
             bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))
             total += 1
-        except Exception:
-            pass
+        except Exception: pass
 
     data["users"][user_id]["user_msgs"] = []
     data["users"][user_id]["admin_msgs"] = []
@@ -323,12 +298,10 @@ def direct_message(message):
     if user_id in data["blocked"]:
         bot.send_message(ADMIN_ID, "⛔ User is blocked."); return
     try:
-        # User side screenshot/save/forward locked
         sent = bot.send_message(int(user_id), text, protect_content=True)
         ensure_user(data, user_id)
         data["users"][user_id]["admin_msgs"].append(sent.message_id)
 
-        # 6-Hour Auto Delete
         data.setdefault("auto_delete", []).append({
             "chat_id": int(user_id),
             "message_id": sent.message_id,
@@ -488,7 +461,7 @@ def user_profile(message):
     bot.send_message(ADMIN_ID, text, disable_web_page_preview=True)
 
 # ============================================================
-# CORE ROUTING ENGINE - ASYMMETRIC PROTECTION
+# CORE ROUTING ENGINE - AUTO-REBLUR MEDIA (NO BUTTON REQUIRED)
 # ============================================================
 
 @bot.message_handler(func=lambda message: True, content_types=SUPPORTED_TYPES)
@@ -498,7 +471,7 @@ def handle_all_messages(message):
     data = load_data()
 
     # ========================================================
-    # ADMIN -> USER (COPY MODE + PROTECT_CONTENT = ADMIN 100% HIDE, USER BLOCKED FROM SAVING/RECORDING)
+    # ADMIN -> USER (AUTO RE-BLUR SPOILER + PROTECT_CONTENT)
     # ========================================================
     if chat_id == ADMIN_ID:
         target_user = None
@@ -518,17 +491,58 @@ def handle_all_messages(message):
             bot.send_message(ADMIN_ID, "⛔ Delivery failed: User is blocked."); return
 
         try:
-            # User ko copy karke bhejenge taaki admin hide rahe + protect_content se user screenshot/recording na le sake
-            args = {
-                "chat_id": int(target_user),
-                "from_chat_id": ADMIN_ID,
-                "message_id": message_id,
-                "protect_content": True
-            }
-            if target_quote_id:
-                args["reply_to_message_id"] = int(target_quote_id)
+            sent = None
+            quote_arg = {"reply_to_message_id": int(target_quote_id)} if target_quote_id else {}
 
-            sent = bot.copy_message(**args)
+            # PHOTO (SPOILER + AUTO RE-BLUR WORKER)
+            if message.content_type == "photo":
+                file_id = message.photo[-1].file_id
+                caption = message.caption or ""
+                sent = bot.send_photo(
+                    chat_id=int(target_user),
+                    photo=file_id,
+                    caption=caption,
+                    has_spoiler=True,
+                    protect_content=True,
+                    **quote_arg
+                )
+                # Background thread: Bina button ke auto fresh blur replace karega
+                threading.Thread(
+                    target=auto_reblur_media,
+                    args=(int(target_user), sent.message_id, "photo", file_id, caption),
+                    daemon=True
+                ).start()
+
+            # VIDEO (SPOILER + AUTO RE-BLUR WORKER)
+            elif message.content_type == "video":
+                file_id = message.video.file_id
+                caption = message.caption or ""
+                sent = bot.send_video(
+                    chat_id=int(target_user),
+                    video=file_id,
+                    caption=caption,
+                    has_spoiler=True,
+                    protect_content=True,
+                    **quote_arg
+                )
+                # Background thread: Bina button ke auto fresh blur replace karega
+                threading.Thread(
+                    target=auto_reblur_media,
+                    args=(int(target_user), sent.message_id, "video", file_id, caption),
+                    daemon=True
+                ).start()
+
+            # TEXT, DOCS, AUDIO (NORMAL COPY)
+            else:
+                args = {
+                    "chat_id": int(target_user),
+                    "from_chat_id": ADMIN_ID,
+                    "message_id": message_id,
+                    "protect_content": True
+                }
+                if target_quote_id:
+                    args["reply_to_message_id"] = int(target_quote_id)
+                sent = bot.copy_message(**args)
 
             ensure_user(data, target_user)
             data["users"][target_user]["admin_msgs"].append(sent.message_id)
@@ -552,7 +566,7 @@ def handle_all_messages(message):
         return
 
     # ========================================================
-    # USER -> ADMIN (FORWARD MODE = ADMIN KO DIRECT PROFILE DIKHEGI, NO RESTRICTION ON ADMIN)
+    # USER -> ADMIN (FORWARD MODE: ADMIN KO FULL PROFILE DIKHEGI)
     # ========================================================
     user_id = str(chat_id)
     if user_id in data["blocked"]: return
@@ -566,8 +580,6 @@ def handle_all_messages(message):
         reply_to_admin_msg_id = data["msg_map_u2a"].get(lookup_key)
 
     try:
-        # bot.forward_message use hoga: Admin ko sender ki actual profile dikhegi
-        # Koi protect_content nahi lagega taaki admin screenshot, save ya screen recording aaram se kar sake
         copied = bot.forward_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id)
         admin_message_id = copied.message_id
 
@@ -665,7 +677,7 @@ def start_services():
 
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
-    logging.info("Core Gateway Server Running with Auto-Delete Worker...")
+    logging.info("Core Gateway Server Running with Auto-Delete & Auto-Reblur...")
 
     try:
         bot.delete_webhook(drop_pending_updates=True)
