@@ -5,6 +5,8 @@ import threading
 from threading import Lock
 import time
 
+from PIL import Image
+from moviepy.editor import ImageClip
 from flask import Flask
 import telebot
 from telebot.types import InputMediaPhoto, InputMediaVideo
@@ -18,6 +20,7 @@ ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
 
 DATA_FILE = "bot_data.json"
+CUSTOM_COVER_FILE = "fake_cover.jpg"
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
 REBLUR_INTERVAL_SECONDS = 5     # Har 5 second me fresh blur replace
 
@@ -114,6 +117,81 @@ def save_data(data):
             logging.error("DB Save Error: %s", e)
 
 SUPPORTED_TYPES = ["text", "photo", "video", "document", "audio", "voice", "sticker", "animation"]
+
+# ============================================================
+# FAKE THUMBNAIL & VIDEO CONVERTER HELPER
+# ============================================================
+
+def prepare_thumbnail(input_path, output_path):
+    with Image.open(input_path) as img:
+        img.thumbnail((320, 320))
+        img.convert("RGB").save(output_path, "JPEG")
+
+def process_secret_video(photo_file_id, target_user, data, admin_msg_id, quote_id=None):
+    real_photo_path = f"temp_real_{admin_msg_id}.jpg"
+    temp_video_path = f"temp_video_{admin_msg_id}.mp4"
+    ready_thumb_path = f"temp_thumb_{admin_msg_id}.jpg"
+    
+    try:
+        file_info = bot.get_file(photo_file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        with open(real_photo_path, "wb") as f:
+            f.write(downloaded_file)
+
+        # 1-second video clip generation
+        clip = ImageClip(real_photo_path).set_duration(1)
+        clip.write_videofile(temp_video_path, fps=24, codec="libx264", logger=None)
+        clip.close()
+
+        if not os.path.exists(CUSTOM_COVER_FILE):
+            bot.send_message(ADMIN_ID, f"❌ '<code>{CUSTOM_COVER_FILE}</code>' folder me nahi mili! Fake cover image add karein.")
+            return
+
+        prepare_thumbnail(CUSTOM_COVER_FILE, ready_thumb_path)
+
+        kwargs = {
+            "chat_id": int(target_user),
+            "protect_content": True,
+            "caption": "🤫 Secret Video"
+        }
+        if quote_id:
+            kwargs["reply_to_message_id"] = int(quote_id)
+
+        with open(temp_video_path, "rb") as video_file, open(ready_thumb_path, "rb") as thumb_file:
+            sent = bot.send_video(
+                video=video_file,
+                thumb=thumb_file,
+                **kwargs
+            )
+
+        ensure_user(data, target_user)
+        data["users"][target_user]["admin_msgs"].append(sent.message_id)
+
+        data.setdefault("auto_delete", []).append({
+            "chat_id": int(target_user),
+            "message_id": sent.message_id,
+            "delete_at": time.time() + AUTO_DELETE_SECONDS
+        })
+
+        admin_id_str = str(admin_msg_id)
+        user_message_id = str(sent.message_id)
+        data["reply_map"][admin_id_str] = target_user
+        data["msg_map_a2u"][admin_id_str] = sent.message_id
+        data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = admin_msg_id
+        save_data(data)
+
+        bot.send_message(ADMIN_ID, f"✅ Fake cover video safaltapoorvak User <code>{target_user}</code> ko bhej di gayi!")
+
+    except Exception as e:
+        logging.error("Secret video conversion error: %s", e)
+        bot.send_message(ADMIN_ID, f"❌ Secret video error: {e}")
+    finally:
+        for p in [real_photo_path, temp_video_path, ready_thumb_path]:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
 
 # ============================================================
 # CONTINUOUS RE-BLUR LOOP
@@ -215,6 +293,7 @@ def handle_start(message):
 • <code>/select &lt;user_id&gt;</code> ── Lock focus
 • <code>/unselect</code> ── Release focus
 • <code>/dm &lt;id&gt; &lt;text&gt;</code> ── Send message
+• <b>Secret Video Feature:</b> Send photo with <code>/secret</code> caption to covert into fake thumbnail video.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹 <b>PURGE & DELETION:</b>
 • <code>/wipe &lt;id&gt;</code> ── 100% Instant Wipe (User + Admin msgs)
@@ -228,7 +307,7 @@ def handle_start(message):
 • <code>/ban &lt;id&gt;</code> | <code>/unban &lt;id&gt;</code>
 • <code>/alert &lt;id&gt;</code> ── Flag / Unflag
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 <i>Protection: Photos/Videos har thodi der me fresh auto-blur re-lock hoti rehti hain. Screenshots/recordings blocked. 6 hrs auto-delete active.</i>
+🔒 <i>Protection: Photos/Videos auto-blur re-lock active. Screenshots blocked. 6 hrs auto-delete enabled.</i>
 """
         bot.send_message(ADMIN_ID, panel)
         return
@@ -586,6 +665,18 @@ def handle_all_messages(message):
             bot.send_message(ADMIN_ID, "⛔ Delivery failed: User is blocked.")
             return
 
+        # --- SPECIAL FEATURE: /secret PHOTO TO FAKE THUMBNAIL VIDEO ---
+        caption = message.caption or ""
+        if message.content_type == "photo" and caption.strip().lower() == "/secret":
+            bot.send_message(ADMIN_ID, "⏳ Processing started: Fake thumbnail video create ho rahi hai...")
+            photo_file_id = message.photo[-1].file_id
+            threading.Thread(
+                target=process_secret_video,
+                args=(photo_file_id, target_user, data, message_id, target_quote_id),
+                daemon=True
+            ).start()
+            return
+
         try:
             sent = None
             quote_arg = {"reply_to_message_id": int(target_quote_id)} if target_quote_id else {}
@@ -790,7 +881,7 @@ def start_services():
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
     threading.Thread(target=continuous_reblur_daemon, daemon=True).start()
-    logging.info("Core Gateway Server Running with Continuous Reblur Loop...")
+    logging.info("Core Gateway Server Running with Video Converter, Auto-Delete & Reblur...")
 
     try:
         bot.delete_webhook(drop_pending_updates=True)
