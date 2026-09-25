@@ -23,49 +23,49 @@ from telebot.types import InputMediaPhoto, InputMediaVideo
 # ENVIRONMENT & CONFIGURATION
 # ============================================================
 
-TOKEN = os.getenv("BOT_TOKEN")[span_1](start_span)[span_1](end_span)
-ADMIN_ID_RAW = os.getenv("ADMIN_ID")[span_2](start_span)[span_2](end_span)
-PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()[span_3](start_span)[span_3](end_span)
+TOKEN = os.getenv("BOT_TOKEN")[span_2](start_span)[span_2](end_span)
+ADMIN_ID_RAW = os.getenv("ADMIN_ID")[span_3](start_span)[span_3](end_span)
+PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()[span_4](start_span)[span_4](end_span)
 
-DATA_FILE = "bot_data.json[span_4](start_span)"[span_4](end_span)
+DATA_FILE = "bot_data.json[span_5](start_span)"[span_5](end_span)
 CUSTOM_COVER_FILE = "fake_cover.jpg"
 AUTO_DELETE_SECONDS = 6 * 3600
 REBLUR_INTERVAL_SECONDS = 5
 
 if not TOKEN:
-    raise RuntimeError("BOT_TOKEN environment variable is not set!")[span_5](start_span)[span_5](end_span)
+    raise RuntimeError("BOT_TOKEN environment variable is not set!")[span_6](start_span)[span_6](end_span)
 
 if not ADMIN_ID_RAW:
-    raise RuntimeError("ADMIN_ID environment variable is not set!")[span_6](start_span)[span_6](end_span)
+    raise RuntimeError("ADMIN_ID environment variable is not set!")[span_7](start_span)[span_7](end_span)
 
 try:
-    ADMIN_ID = int(ADMIN_ID_RAW)[span_7](start_span)[span_7](end_span)
+    ADMIN_ID = int(ADMIN_ID_RAW)[span_8](start_span)[span_8](end_span)
 except ValueError:
-    raise RuntimeError("ADMIN_ID must be a valid integer!")[span_8](start_span)[span_8](end_span)
+    raise RuntimeError("ADMIN_ID must be a valid integer!")[span_9](start_span)[span_9](end_span)
 
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML")[span_9](start_span)[span_9](end_span)
-db_lock = Lock()[span_10](start_span)[span_10](end_span)
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")[span_10](start_span)[span_10](end_span)
+db_lock = Lock()[span_11](start_span)[span_11](end_span)
 
 active_spoilers = {}
 active_spoilers_lock = Lock()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")[span_11](start_span)[span_11](end_span)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")[span_12](start_span)[span_12](end_span)
 
 # ============================================================
 # WEB SERVER / KEEP ALIVE
 # ============================================================
 
-app = Flask(__name__)[span_12](start_span)[span_12](end_span)
+app = Flask(__name__)[span_13](start_span)[span_13](end_span)
 
 @app.route("/")
 def home():
-    return "⚡ Gateway Service Active ✅", 200[span_13](start_span)[span_13](end_span)
+    return "⚡ Gateway Service Active ✅", 200[span_14](start_span)[span_14](end_span)
 
 def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))[span_14](start_span)[span_14](end_span)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))[span_15](start_span)[span_15](end_span)
 
 # ============================================================
-# DATABASE CORE (INDENTATION STRICT 4 SPACES)
+# DATABASE CORE (STRICT 4-SPACE INDENTATION)
 # ============================================================
 
 def empty_db():
@@ -78,50 +78,52 @@ def empty_db():
         "alerts": [],
         "selected_user": None,
         "auto_delete": []
-    }[span_15](start_span)[span_15](end_span)
+    }[span_16](start_span)[span_16](end_span)
 
 def ensure_user(data, user_id):
     uid = str(user_id)
-    if uid not in data.get("users", {}):
-        data.setdefault("users", {})[uid] = {"admin_msgs": [], "user_msgs": []}
+    if "users" not in data:
+        data["users"] = {}
+    if uid not in data["users"]:
+        data["users"][uid] = {"admin_msgs": [], "user_msgs": []}
 
 def ensure_protected_user(data):
     if PROTECTED_USER_ID:
         ensure_user(data, PROTECTED_USER_ID)
 
 def load_data():
-    with db_lock:[span_16](start_span)[span_16](end_span)
-        if not os.path.exists(DATA_FILE):[span_17](start_span)[span_17](end_span)
-            data = empty_db()[span_18](start_span)[span_18](end_span)
-            ensure_protected_user(data)[span_19](start_span)[span_19](end_span)
-            return data[span_20](start_span)[span_20](end_span)
+    with db_lock:
+        if not os.path.exists(DATA_FILE):
+            data = empty_db()
+            ensure_protected_user(data)
+            return data
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:[span_21](start_span)[span_21](end_span)
-                data = json.load(f)[span_22](start_span)[span_22](end_span)
-            for key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a", "blocked", "alerts"]:[span_23](start_span)[span_23](end_span)
-                if key not in data:[span_24](start_span)[span_24](end_span)
-                    data[key] = {} if key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a"] else [][span_25](start_span)[span_25](end_span)
-            data.setdefault("selected_user", None)[span_26](start_span)[span_26](end_span)
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a", "blocked", "alerts"]:
+                if key not in data:
+                    data[key] = {} if key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a"] else []
+            data.setdefault("selected_user", None)
             data.setdefault("auto_delete", [])
-            ensure_protected_user(data)[span_27](start_span)[span_27](end_span)
-            return data[span_28](start_span)[span_28](end_span)
+            ensure_protected_user(data)
+            return data
         except Exception as e:
-            logging.error("DB Load Error: %s", e)[span_29](start_span)[span_29](end_span)
-            data = empty_db()[span_30](start_span)[span_30](end_span)
-            ensure_protected_user(data)[span_31](start_span)[span_31](end_span)
-            return data[span_32](start_span)[span_32](end_span)
+            logging.error("DB Load Error: %s", e)
+            data = empty_db()
+            ensure_protected_user(data)
+            return data
 
 def save_data(data):
-    with db_lock:[span_33](start_span)[span_33](end_span)
-        temp_file = DATA_FILE + ".tmp[span_34](start_span)"[span_34](end_span)
+    with db_lock:
+        temp_file = DATA_FILE + ".tmp"
         try:
-            with open(temp_file, "w", encoding="utf-8") as f:[span_35](start_span)[span_35](end_span)
-                json.dump(data, f, ensure_ascii=False, indent=2)[span_36](start_span)[span_36](end_span)
-            os.replace(temp_file, DATA_FILE)[span_37](start_span)[span_37](end_span)
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(temp_file, DATA_FILE)
         except Exception as e:
-            logging.error("DB Save Error: %s", e)[span_38](start_span)[span_38](end_span)
+            logging.error("DB Save Error: %s", e)
 
-SUPPORTED_TYPES = ["text", "photo", "video", "document", "audio", "voice", "sticker", "animation"][span_39](start_span)[span_39](end_span)
+SUPPORTED_TYPES = ["text", "photo", "video", "document", "audio", "voice", "sticker", "animation"][span_17](start_span)[span_17](end_span)
 
 # ============================================================
 # FAKE THUMBNAIL & VIDEO CONVERTER
@@ -188,8 +190,8 @@ def process_secret_video(photo_file_id, target_user, data, admin_msg_id, quote_i
                 **kwargs
             )
 
-        ensure_user(data, target_user)[span_40](start_span)[span_40](end_span)
-        data["users"][target_user]["admin_msgs"].append(sent.message_id)[span_41](start_span)[span_41](end_span)
+        ensure_user(data, target_user)
+        data["users"][target_user]["admin_msgs"].append(sent.message_id)
 
         data.setdefault("auto_delete", []).append({
             "chat_id": int(target_user),
@@ -199,10 +201,10 @@ def process_secret_video(photo_file_id, target_user, data, admin_msg_id, quote_i
 
         admin_id_str = str(admin_msg_id)
         user_message_id = str(sent.message_id)
-        data["reply_map"][admin_id_str] = target_user[span_42](start_span)[span_42](end_span)
-        data["msg_map_a2u"][admin_id_str] = sent.message_id[span_43](start_span)[span_43](end_span)
-        data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = admin_msg_id[span_44](start_span)[span_44](end_span)
-        save_data(data)[span_45](start_span)[span_45](end_span)
+        data["reply_map"][admin_id_str] = target_user
+        data["msg_map_a2u"][admin_id_str] = sent.message_id
+        data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = admin_msg_id
+        save_data(data)
 
         bot.send_message(ADMIN_ID, f"✅ Fake cover video user <code>{target_user}</code> ko bhej di gayi!")
 
@@ -267,7 +269,7 @@ def auto_delete_worker():
         try:
             time.sleep(15)
             now = time.time()
-            data = load_data()[span_46](start_span)[span_46](end_span)
+            data = load_data()
             queue = data.get("auto_delete", [])
             if not queue:
                 continue
@@ -291,7 +293,7 @@ def auto_delete_worker():
 
             if modified:
                 data["auto_delete"] = remaining
-                save_data(data)[span_47](start_span)[span_47](end_span)
+                save_data(data)
         except Exception as e:
             logging.error("Auto delete worker error: %s", e)
 
@@ -301,11 +303,11 @@ def auto_delete_worker():
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    chat_id = message.chat.id[span_48](start_span)[span_48](end_span)
-    data = load_data()[span_49](start_span)[span_49](end_span)
+    chat_id = message.chat.id[span_18](start_span)[span_18](end_span)
+    data = load_data()[span_19](start_span)[span_19](end_span)
 
-    if chat_id == ADMIN_ID:[span_50](start_span)[span_50](end_span)
-        selected = f"<code>{data['selected_user']}</code>" if data.get("selected_user") else "⭕ <i>None (Manual/Reply Mode)</i>[span_51](start_span)"[span_51](end_span)
+    if chat_id == ADMIN_ID:[span_20](start_span)[span_20](end_span)
+        selected = f"<code>{data['selected_user']}</code>" if data.get("selected_user") else "⭕ <i>None (Manual/Reply Mode)</i>[span_21](start_span)"[span_21](end_span)
         panel = f"""
 🎛️ <b>CONTROL CONSOLE | ADMIN</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -333,15 +335,15 @@ def handle_start(message):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔒 <i>Protection: Photos/Videos auto-blur active. Screenshots blocked. 6 hrs auto-delete enabled.</i>
 """
-        bot.send_message(ADMIN_ID, panel)[span_52](start_span)[span_52](end_span)
+        bot.send_message(ADMIN_ID, panel)[span_22](start_span)[span_22](end_span)
         return
 
-    user_id = str(chat_id)[span_53](start_span)[span_53](end_span)
-    if user_id in data["blocked"]:[span_54](start_span)[span_54](end_span)
+    user_id = str(chat_id)[span_23](start_span)[span_23](end_span)
+    if user_id in data["blocked"]:[span_24](start_span)[span_24](end_span)
         return
 
-    ensure_user(data, user_id)[span_55](start_span)[span_55](end_span)
-    save_data(data)[span_56](start_span)[span_56](end_span)
+    ensure_user(data, user_id)[span_25](start_span)[span_25](end_span)
+    save_data(data)[span_26](start_span)[span_26](end_span)
 
     welcome_text = """
 🔒 <b>ENCRYPTED SECURE CHANNEL</b>
@@ -351,41 +353,41 @@ Aap yahan apna koi bhi message, photo, video ya document bhej sakte hain.
 </blockquote>
 💬 <i>Apna sandesh niche type karke send karein.</i>
 """
-    bot.send_message(chat_id, welcome_text, protect_content=True)[span_57](start_span)[span_57](end_span)
+    bot.send_message(chat_id, welcome_text, protect_content=True)[span_27](start_span)[span_27](end_span)
 
 @bot.message_handler(commands=["wipe"])
 def wipe_chat(message):
-    if message.chat.id != ADMIN_ID:[span_58](start_span)[span_58](end_span)
+    if message.chat.id != ADMIN_ID:[span_28](start_span)[span_28](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_59](start_span)[span_59](end_span)
+        user_id = message.text.split()[1][span_29](start_span)[span_29](end_span)
     except IndexError:
-        data = load_data()[span_60](start_span)[span_60](end_span)
-        user_id = data.get("selected_user")[span_61](start_span)[span_61](end_span)
+        data = load_data()[span_30](start_span)[span_30](end_span)
+        user_id = data.get("selected_user")[span_31](start_span)[span_31](end_span)
         if not user_id:
             bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/wipe &lt;user_id&gt;</code>")
             return
 
-    user_id = str(user_id)[span_62](start_span)[span_62](end_span)
-    data = load_data()[span_63](start_span)[span_63](end_span)
-    if user_id not in data["users"]:[span_64](start_span)[span_64](end_span)
-        bot.send_message(ADMIN_ID, "⚠️ User history not found.")[span_65](start_span)[span_65](end_span)
+    user_id = str(user_id)[span_32](start_span)[span_32](end_span)
+    data = load_data()[span_33](start_span)[span_33](end_span)
+    if user_id not in data["users"]:[span_34](start_span)[span_34](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ User history not found.")[span_35](start_span)[span_35](end_span)
         return
 
-    user_msgs = list(data["users"][user_id].get("user_msgs", []))[span_66](start_span)[span_66](end_span)
-    admin_msgs = list(data["users"][user_id].get("admin_msgs", []))[span_67](start_span)[span_67](end_span)
+    user_msgs = list(data["users"][user_id].get("user_msgs", []))[span_36](start_span)[span_36](end_span)
+    admin_msgs = list(data["users"][user_id].get("admin_msgs", []))[span_37](start_span)[span_37](end_span)
     total = 0
 
     for msg_id in user_msgs:
         try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_68](start_span)[span_68](end_span)
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_38](start_span)[span_38](end_span)
             total += 1
         except Exception:
             pass
 
     for msg_id in admin_msgs:
         try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_69](start_span)[span_69](end_span)
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_39](start_span)[span_39](end_span)
             total += 1
         except Exception:
             pass
@@ -393,54 +395,54 @@ def wipe_chat(message):
             active_spoilers.pop((int(user_id), int(msg_id)), None)
 
     data["users"][user_id]["user_msgs"] = []
-    data["users"][user_id]["admin_msgs"] = [][span_70](start_span)[span_70](end_span)
+    data["users"][user_id]["admin_msgs"] = [][span_40](start_span)[span_40](end_span)
     data["auto_delete"] = [x for x in data.get("auto_delete", []) if str(x.get("chat_id")) != user_id]
-    save_data(data)[span_71](start_span)[span_71](end_span)
+    save_data(data)[span_41](start_span)[span_41](end_span)
     bot.send_message(ADMIN_ID, f"🧹 <b>100% Wiped:</b> User <code>{user_id}</code> ki screen se <b>{total}</b> messages delete kar diye gaye.")
 
 @bot.message_handler(commands=["select"])
 def select_user(message):
-    if message.chat.id != ADMIN_ID:[span_72](start_span)[span_72](end_span)
+    if message.chat.id != ADMIN_ID:[span_42](start_span)[span_42](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_73](start_span)[span_73](end_span)
+        user_id = message.text.split()[1][span_43](start_span)[span_43](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/select &lt;user_id&gt;</code>")[span_74](start_span)[span_74](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/select &lt;user_id&gt;</code>")[span_44](start_span)[span_44](end_span)
         return
-    data = load_data()[span_75](start_span)[span_75](end_span)
-    ensure_user(data, user_id)[span_76](start_span)[span_76](end_span)
-    data["selected_user"] = str(user_id)[span_77](start_span)[span_77](end_span)
-    save_data(data)[span_78](start_span)[span_78](end_span)
-    bot.send_message(ADMIN_ID, f"🎯 <b>Focus Locked:</b> <code>{user_id}</code>")[span_79](start_span)[span_79](end_span)
+    data = load_data()[span_45](start_span)[span_45](end_span)
+    ensure_user(data, user_id)[span_46](start_span)[span_46](end_span)
+    data["selected_user"] = str(user_id)[span_47](start_span)[span_47](end_span)
+    save_data(data)[span_48](start_span)[span_48](end_span)
+    bot.send_message(ADMIN_ID, f"🎯 <b>Focus Locked:</b> <code>{user_id}</code>")[span_49](start_span)[span_49](end_span)
 
 @bot.message_handler(commands=["unselect"])
 def unselect_user(message):
-    if message.chat.id != ADMIN_ID:[span_80](start_span)[span_80](end_span)
+    if message.chat.id != ADMIN_ID:[span_50](start_span)[span_50](end_span)
         return
-    data = load_data()[span_81](start_span)[span_81](end_span)
-    data["selected_user"] = None[span_82](start_span)[span_82](end_span)
-    save_data(data)[span_83](start_span)[span_83](end_span)
-    bot.send_message(ADMIN_ID, "🎯 <b>Focus Released.</b> Manual/Reply mode active.")[span_84](start_span)[span_84](end_span)
+    data = load_data()[span_51](start_span)[span_51](end_span)
+    data["selected_user"] = None[span_52](start_span)[span_52](end_span)
+    save_data(data)[span_53](start_span)[span_53](end_span)
+    bot.send_message(ADMIN_ID, "🎯 <b>Focus Released.</b> Manual/Reply mode active.")[span_54](start_span)[span_54](end_span)
 
 @bot.message_handler(commands=["dm"])
 def direct_message(message):
-    if message.chat.id != ADMIN_ID:[span_85](start_span)[span_85](end_span)
+    if message.chat.id != ADMIN_ID:[span_55](start_span)[span_55](end_span)
         return
     try:
-        parts = message.text.split(" ", 2)[span_86](start_span)[span_86](end_span)
-        user_id = parts[1][span_87](start_span)[span_87](end_span)
-        text = parts[2][span_88](start_span)[span_88](end_span)
+        parts = message.text.split(" ", 2)[span_56](start_span)[span_56](end_span)
+        user_id = parts[1][span_57](start_span)[span_57](end_span)
+        text = parts[2][span_58](start_span)[span_58](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/dm &lt;user_id&gt; &lt;text&gt;</code>")[span_89](start_span)[span_89](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/dm &lt;user_id&gt; &lt;text&gt;</code>")[span_59](start_span)[span_59](end_span)
         return
-    data = load_data()[span_90](start_span)[span_90](end_span)
-    if user_id in data["blocked"]:[span_91](start_span)[span_91](end_span)
-        bot.send_message(ADMIN_ID, "⛔ User is blocked.")[span_92](start_span)[span_92](end_span)
+    data = load_data()[span_60](start_span)[span_60](end_span)
+    if user_id in data["blocked"]:[span_61](start_span)[span_61](end_span)
+        bot.send_message(ADMIN_ID, "⛔ User is blocked.")[span_62](start_span)[span_62](end_span)
         return
     try:
-        sent = bot.send_message(int(user_id), text, protect_content=True)[span_93](start_span)[span_93](end_span)
-        ensure_user(data, user_id)[span_94](start_span)[span_94](end_span)
-        data["users"][user_id]["admin_msgs"].append(sent.message_id)[span_95](start_span)[span_95](end_span)
+        sent = bot.send_message(int(user_id), text, protect_content=True)[span_63](start_span)[span_63](end_span)
+        ensure_user(data, user_id)[span_64](start_span)[span_64](end_span)
+        data["users"][user_id]["admin_msgs"].append(sent.message_id)[span_65](start_span)[span_65](end_span)
 
         data.setdefault("auto_delete", []).append({
             "chat_id": int(user_id),
@@ -448,248 +450,247 @@ def direct_message(message):
             "delete_at": time.time() + AUTO_DELETE_SECONDS
         })
 
-        admin_message_id = str(message.message_id)[span_96](start_span)[span_96](end_span)
-        data["reply_map"][admin_message_id] = str(user_id)[span_97](start_span)[span_97](end_span)
-        data["msg_map_a2u"][admin_message_id] = sent.message_id[span_98](start_span)[span_98](end_span)
-        data["msg_map_u2a"][f"{user_id}_{sent.message_id}"] = message.message_id[span_99](start_span)[span_99](end_span)
-        save_data(data)[span_100](start_span)[span_100](end_span)
+        admin_message_id = str(message.message_id)[span_66](start_span)[span_66](end_span)
+        data["reply_map"][admin_message_id] = str(user_id)[span_67](start_span)[span_67](end_span)
+        data["msg_map_a2u"][admin_message_id] = sent.message_id[span_68](start_span)[span_68](end_span)
+        data["msg_map_u2a"][f"{user_id}_{sent.message_id}"] = message.message_id[span_69](start_span)[span_69](end_span)
+        save_data(data)[span_70](start_span)[span_70](end_span)
         bot.send_message(ADMIN_ID, f"✅ <b>Sent to</b> <code>{user_id}</code> (Protected + Auto-deletes in 6 hrs)")
     except Exception as e:
-        logging.error("DM delivery error: %s", e)[span_101](start_span)[span_101](end_span)
-        bot.send_message(ADMIN_ID, "❌ <b>Delivery failed.</b>")[span_102](start_span)[span_102](end_span)
+        logging.error("DM delivery error: %s", e)[span_71](start_span)[span_71](end_span)
+        bot.send_message(ADMIN_ID, "❌ <b>Delivery failed.</b>")[span_72](start_span)[span_72](end_span)
 
 @bot.message_handler(commands=["clearall"])
 def clear_admin_messages(message):
-    if message.chat.id != ADMIN_ID:[span_103](start_span)[span_103](end_span)
+    if message.chat.id != ADMIN_ID:[span_73](start_span)[span_73](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_104](start_span)[span_104](end_span)
+        user_id = message.text.split()[1][span_74](start_span)[span_74](end_span)
     except IndexError:
-        data = load_data()[span_105](start_span)[span_105](end_span)
-        user_id = data.get("selected_user")[span_106](start_span)[span_106](end_span)
+        data = load_data()[span_75](start_span)[span_75](end_span)
+        user_id = data.get("selected_user")[span_76](start_span)[span_76](end_span)
         if not user_id:
-            bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/clearall &lt;user_id&gt;</code>")[span_107](start_span)[span_107](end_span)
+            bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/clearall &lt;user_id&gt;</code>")[span_77](start_span)[span_77](end_span)
             return
-    user_id = str(user_id)[span_108](start_span)[span_108](end_span)
-    data = load_data()[span_109](start_span)[span_109](end_span)
-    if user_id not in data["users"]:[span_110](start_span)[span_110](end_span)
-        bot.send_message(ADMIN_ID, "⚠️ No message history found.")[span_111](start_span)[span_111](end_span)
+    user_id = str(user_id)[span_78](start_span)[span_78](end_span)
+    data = load_data()[span_79](start_span)[span_79](end_span)
+    if user_id not in data["users"]:[span_80](start_span)[span_80](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ No message history found.")[span_81](start_span)[span_81](end_span)
         return
-    admin_msgs = data["users"][user_id].get("admin_msgs", [])[span_112](start_span)[span_112](end_span)
+    admin_msgs = data["users"][user_id].get("admin_msgs", [])[span_82](start_span)[span_82](end_span)
     count = 0
     for msg_id in admin_msgs:
         try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_113](start_span)[span_113](end_span)
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_83](start_span)[span_83](end_span)
             count += 1
         except Exception:
             pass
         with active_spoilers_lock:
             active_spoilers.pop((int(user_id), int(msg_id)), None)
-    data["users"][user_id]["admin_msgs"] = [][span_114](start_span)[span_114](end_span)
-    save_data(data)[span_115](start_span)[span_115](end_span)
-    bot.send_message(ADMIN_ID, f"🧹 <b>Cleared:</b> {count} Admin messages deleted from <code>{user_id}</code>'s chat.")[span_116](start_span)[span_116](end_span)
+    data["users"][user_id]["admin_msgs"] = [][span_84](start_span)[span_84](end_span)
+    save_data(data)[span_85](start_span)[span_85](end_span)
+    bot.send_message(ADMIN_ID, f"🧹 <b>Cleared:</b> {count} Admin messages deleted from <code>{user_id}</code>'s chat.")[span_86](start_span)[span_86](end_span)
 
 @bot.message_handler(commands=["purge"])
 def purge_chat(message):
-    if message.chat.id != ADMIN_ID:[span_117](start_span)[span_117](end_span)
+    if message.chat.id != ADMIN_ID:[span_87](start_span)[span_87](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_118](start_span)[span_118](end_span)
+        user_id = message.text.split()[1][span_88](start_span)[span_88](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/purge &lt;user_id&gt;</code>")[span_119](start_span)[span_119](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/purge &lt;user_id&gt;</code>")[span_89](start_span)[span_89](end_span)
         return
-    user_id = str(user_id)[span_120](start_span)[span_120](end_span)
-    data = load_data()[span_121](start_span)[span_121](end_span)
-    if user_id not in data["users"]:[span_122](start_span)[span_122](end_span)
-        bot.send_message(ADMIN_ID, "⚠️ User history not found.")[span_123](start_span)[span_123](end_span)
+    user_id = str(user_id)[span_90](start_span)[span_90](end_span)
+    data = load_data()[span_91](start_span)[span_91](end_span)
+    if user_id not in data["users"]:[span_92](start_span)[span_92](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ User history not found.")[span_93](start_span)[span_93](end_span)
         return
-    user_data = data["users"][user_id][span_124](start_span)[span_124](end_span)
-    user_msgs = list(user_data.get("user_msgs", []))[span_125](start_span)[span_125](end_span)
-    admin_msgs = list(user_data.get("admin_msgs", []))[span_126](start_span)[span_126](end_span)
+    user_data = data["users"][user_id][span_94](start_span)[span_94](end_span)
+    user_msgs = list(user_data.get("user_msgs", []))[span_95](start_span)[span_95](end_span)
+    admin_msgs = list(user_data.get("admin_msgs", []))[span_96](start_span)[span_96](end_span)
     total = 0
     for msg_id in user_msgs:
         try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_127](start_span)[span_127](end_span)
-            total += 1[span_128](start_span)[span_128](end_span)
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_97](start_span)[span_97](end_span)
+            total += 1[span_98](start_span)[span_98](end_span)
         except Exception:
-            pass[span_129](start_span)[span_129](end_span)
+            pass[span_99](start_span)[span_99](end_span)
     for msg_id in admin_msgs:
         try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_130](start_span)[span_130](end_span)
-            total += 1[span_131](start_span)[span_131](end_span)
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))[span_100](start_span)[span_100](end_span)
+            total += 1[span_101](start_span)[span_101](end_span)
         except Exception:
-            pass[span_132](start_span)[span_132](end_span)
+            pass[span_102](start_span)[span_102](end_span)
         with active_spoilers_lock:
             active_spoilers.pop((int(user_id), int(msg_id)), None)
-    reply_map = data.get("reply_map", {})[span_133](start_span)[span_133](end_span)
-    msg_map_a2u = data.get("msg_map_a2u", {})[span_134](start_span)[span_134](end_span)
-    msg_map_u2a = data.get("msg_map_u2a", {})[span_135](start_span)[span_135](end_span)
-    for admin_id, mapped_user in list(reply_map.items()):[span_136](start_span)[span_136](end_span)
-        if str(mapped_user) == user_id:[span_137](start_span)[span_137](end_span)
-            reply_map.pop(admin_id, None)[span_138](start_span)[span_138](end_span)
-            msg_map_a2u.pop(admin_id, None)[span_139](start_span)[span_139](end_span)
-    prefix = f"{user_id}_[span_140](start_span)"[span_140](end_span)
-    for key in list(msg_map_u2a.keys()):[span_141](start_span)[span_141](end_span)
+    reply_map = data.get("reply_map", {})[span_103](start_span)[span_103](end_span)
+    msg_map_a2u = data.get("msg_map_a2u", {})[span_104](start_span)[span_104](end_span)
+    msg_map_u2a = data.get("msg_map_u2a", {})[span_105](start_span)[span_105](end_span)
+    for admin_id, mapped_user in list(reply_map.items()):[span_106](start_span)[span_106](end_span)
+        if str(mapped_user) == user_id:[span_107](start_span)[span_107](end_span)
+            reply_map.pop(admin_id, None)[span_108](start_span)[span_108](end_span)
+            msg_map_a2u.pop(admin_id, None)[span_109](start_span)[span_109](end_span)
+    prefix = f"{user_id}_[span_110](start_span)"[span_110](end_span)
+    for key in list(msg_map_u2a.keys()):[span_111](start_span)[span_111](end_span)
         if key.startswith(prefix):
-            msg_map_u2a.pop(key, None)[span_142](start_span)[span_142](end_span)
-    data["users"][user_id] = {"admin_msgs": [], "user_msgs": []}[span_143](start_span)[span_143](end_span)
+            msg_map_u2a.pop(key, None)[span_112](start_span)[span_112](end_span)
+    data["users"][user_id] = {"admin_msgs": [], "user_msgs": []}[span_113](start_span)[span_113](end_span)
     data["auto_delete"] = [x for x in data.get("auto_delete", []) if str(x.get("chat_id")) != user_id]
-    save_data(data)[span_144](start_span)[span_144](end_span)
-    bot.send_message(ADMIN_ID, f"💥 <b>Purge completed.</b>\n\n👤 User: <code>{user_id}</code>\n🗑 Deleted known messages: <b>{total}</b>\n🧹 Routing mappings cleared.")[span_145](start_span)[span_145](end_span)
+    save_data(data)[span_114](start_span)[span_114](end_span)
+    bot.send_message(ADMIN_ID, f"💥 <b>Purge completed.</b>\n\n👤 User: <code>{user_id}</code>\n🗑 Deleted known messages: <b>{total}</b>\n🧹 Routing mappings cleared.")[span_115](start_span)[span_115](end_span)
 
 @bot.message_handler(commands=["resetdb"])
 def reset_database(message):
-    if message.chat.id != ADMIN_ID:[span_146](start_span)[span_146](end_span)
+    if message.chat.id != ADMIN_ID:[span_116](start_span)[span_116](end_span)
         return
     with active_spoilers_lock:
         active_spoilers.clear()
-    data = empty_db()[span_147](start_span)[span_147](end_span)
-    ensure_protected_user(data)[span_148](start_span)[span_148](end_span)
-    save_data(data)[span_149](start_span)[span_149](end_span)
-    bot.send_message(ADMIN_ID, "♻️ <b>Database Reset:</b> All state logs and mappings cleared.")[span_150](start_span)[span_150](end_span)
+    data = empty_db()[span_117](start_span)[span_117](end_span)
+    ensure_protected_user(data)[span_118](start_span)[span_118](end_span)
+    save_data(data)[span_119](start_span)[span_119](end_span)
+    bot.send_message(ADMIN_ID, "♻️ <b>Database Reset:</b> All state logs and mappings cleared.")[span_120](start_span)[span_120](end_span)
 
 @bot.message_handler(commands=["users"])
 def list_users(message):
-    if message.chat.id != ADMIN_ID:[span_151](start_span)[span_151](end_span)
+    if message.chat.id != ADMIN_ID:[span_121](start_span)[span_121](end_span)
         return
-    data = load_data()[span_152](start_span)[span_152](end_span)
-    users_dict = data.get("users", {})[span_153](start_span)[span_153](end_span)
-    if not users_dict:[span_154](start_span)[span_154](end_span)
-        bot.send_message(ADMIN_ID, "👥 <b>No registered users found.</b>")[span_155](start_span)[span_155](end_span)
+    data = load_data()[span_122](start_span)[span_122](end_span)
+    users_dict = data.get("users", {})[span_123](start_span)[span_123](end_span)
+    if not users_dict:[span_124](start_span)[span_124](end_span)
+        bot.send_message(ADMIN_ID, "👥 <b>No registered users found.</b>")[span_125](start_span)[span_125](end_span)
         return
-    text = "📊 <b>USER DIRECTORY</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n[span_156](start_span)"[span_156](end_span)
-    for i, user_id in enumerate(users_dict.keys(), 1):[span_157](start_span)[span_157](end_span)
+    text = "📊 <b>USER DIRECTORY</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n[span_126](start_span)"[span_126](end_span)
+    for i, user_id in enumerate(users_dict.keys(), 1):[span_127](start_span)[span_127](end_span)
         if user_id in data["blocked"]:
-            status = "⛔ [Banned][span_158](start_span)"[span_158](end_span)
+            status = "⛔ [Banned][span_128](start_span)"[span_128](end_span)
         elif user_id in data["alerts"]:
-            status = "🚨 [Flagged][span_159](start_span)"[span_159](end_span)
+            status = "🚨 [Flagged][span_129](start_span)"[span_129](end_span)
         elif user_id == PROTECTED_USER_ID:
             status = "🛡️ [Protected]"
         else:
-            status = "🟢 [Active][span_160](start_span)"[span_160](end_span)
-        text += f"{i}. <code>{user_id}</code> ── {status}\n[span_161](start_span)"[span_161](end_span)
+            status = "🟢 [Active][span_130](start_span)"[span_130](end_span)
+        text += f"{i}. <code>{user_id}</code> ── {status}\n[span_131](start_span)"[span_131](end_span)
     bot.send_message(ADMIN_ID, text)
 
 @bot.message_handler(commands=["ban"])
 def ban_user(message):
-    if message.chat.id != ADMIN_ID:[span_162](start_span)[span_162](end_span)
+    if message.chat.id != ADMIN_ID:[span_132](start_span)[span_132](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_163](start_span)[span_163](end_span)
+        user_id = message.text.split()[1][span_133](start_span)[span_133](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/ban &lt;user_id&gt;</code>")[span_164](start_span)[span_164](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/ban &lt;user_id&gt;</code>")[span_134](start_span)[span_134](end_span)
         return
-    user_id = str(user_id)[span_165](start_span)[span_165](end_span)
-    data = load_data()[span_166](start_span)[span_166](end_span)
-    if user_id not in data["blocked"]:[span_167](start_span)[span_167](end_span)
-        data["blocked"].append(user_id)[span_168](start_span)[span_168](end_span)
-        save_data(data)[span_169](start_span)[span_169](end_span)
-        bot.send_message(ADMIN_ID, f"⛔ User <code>{user_id}</code> is now blocked.")[span_170](start_span)[span_170](end_span)
+    user_id = str(user_id)[span_135](start_span)[span_135](end_span)
+    data = load_data()[span_136](start_span)[span_136](end_span)
+    if user_id not in data["blocked"]:[span_137](start_span)[span_137](end_span)
+        data["blocked"].append(user_id)[span_138](start_span)[span_138](end_span)
+        save_data(data)[span_139](start_span)[span_139](end_span)
+        bot.send_message(ADMIN_ID, f"⛔ User <code>{user_id}</code> is now blocked.")[span_140](start_span)[span_140](end_span)
     else:
-        bot.send_message(ADMIN_ID, "⚠️ User is already blocked.")[span_171](start_span)[span_171](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ User is already blocked.")[span_141](start_span)[span_141](end_span)
 
 @bot.message_handler(commands=["unban"])
 def unban_user(message):
-    if message.chat.id != ADMIN_ID:[span_172](start_span)[span_172](end_span)
+    if message.chat.id != ADMIN_ID:[span_142](start_span)[span_142](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_173](start_span)[span_173](end_span)
+        user_id = message.text.split()[1][span_143](start_span)[span_143](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/unban &lt;user_id&gt;</code>")[span_174](start_span)[span_174](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/unban &lt;user_id&gt;</code>")[span_144](start_span)[span_144](end_span)
         return
-    user_id = str(user_id)[span_175](start_span)[span_175](end_span)
-    data = load_data()[span_176](start_span)[span_176](end_span)
-    if user_id in data["blocked"]:[span_177](start_span)[span_177](end_span)
-        data["blocked"].remove(user_id)[span_178](start_span)[span_178](end_span)
-        save_data(data)[span_179](start_span)[span_179](end_span)
-        bot.send_message(ADMIN_ID, f"✅ User <code>{user_id}</code> unblocked.")[span_180](start_span)[span_180](end_span)
+    user_id = str(user_id)[span_145](start_span)[span_145](end_span)
+    data = load_data()[span_146](start_span)[span_146](end_span)
+    if user_id in data["blocked"]:[span_147](start_span)[span_147](end_span)
+        data["blocked"].remove(user_id)[span_148](start_span)[span_148](end_span)
+        save_data(data)[span_149](start_span)[span_149](end_span)
+        bot.send_message(ADMIN_ID, f"✅ User <code>{user_id}</code> unblocked.")[span_150](start_span)[span_150](end_span)
     else:
-        bot.send_message(ADMIN_ID, "⚠️ User is not blocked.")[span_181](start_span)[span_181](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ User is not blocked.")[span_151](start_span)[span_151](end_span)
 
 @bot.message_handler(commands=["alert"])
 def toggle_alert(message):
-    if message.chat.id != ADMIN_ID:[span_182](start_span)[span_182](end_span)
+    if message.chat.id != ADMIN_ID:[span_152](start_span)[span_152](end_span)
         return
     try:
-        user_id = message.text.split()[1][span_183](start_span)[span_183](end_span)
+        user_id = message.text.split()[1][span_153](start_span)[span_153](end_span)
     except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/alert &lt;user_id&gt;</code>")[span_184](start_span)[span_184](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/alert &lt;user_id&gt;</code>")[span_154](start_span)[span_154](end_span)
         return
-    user_id = str(user_id)[span_185](start_span)[span_185](end_span)
-    data = load_data()[span_186](start_span)[span_186](end_span)
-    if user_id not in data["alerts"]:[span_187](start_span)[span_187](end_span)
-        data["alerts"].append(user_id)[span_188](start_span)[span_188](end_span)
-        bot.send_message(ADMIN_ID, f"🚨 Alert flag ADDED to <code>{user_id}</code>.")[span_189](start_span)[span_189](end_span)
+    user_id = str(user_id)[span_155](start_span)[span_155](end_span)
+    data = load_data()[span_156](start_span)[span_156](end_span)
+    if user_id not in data["alerts"]:[span_157](start_span)[span_157](end_span)
+        data["alerts"].append(user_id)[span_158](start_span)[span_158](end_span)
+        bot.send_message(ADMIN_ID, f"🚨 Alert flag ADDED to <code>{user_id}</code>.")[span_159](start_span)[span_159](end_span)
     else:
-        data["alerts"].remove(user_id)[span_190](start_span)[span_190](end_span)
-        bot.send_message(ADMIN_ID, f"🏳️ Alert flag REMOVED from <code>{user_id}</code>.")[span_191](start_span)[span_191](end_span)
+        data["alerts"].remove(user_id)[span_160](start_span)[span_160](end_span)
+        bot.send_message(ADMIN_ID, f"🏳️ Alert flag REMOVED from <code>{user_id}</code>.")[span_161](start_span)[span_161](end_span)
     save_data(data)
 
 @bot.message_handler(commands=["userprofile"])
 def user_profile(message):
-    if message.chat.id != ADMIN_ID:[span_192](start_span)[span_192](end_span)
+    if message.chat.id != ADMIN_ID:[span_162](start_span)[span_162](end_span)
         return
-    parts = message.text.split(maxsplit=1)[span_193](start_span)[span_193](end_span)
-    if len(parts) < 2:[span_194](start_span)[span_194](end_span)
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/userprofile &lt;user_id&gt;</code>")[span_195](start_span)[span_195](end_span)
+    parts = message.text.split(maxsplit=1)[span_163](start_span)[span_163](end_span)
+    if len(parts) < 2:[span_164](start_span)[span_164](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/userprofile &lt;user_id&gt;</code>")
         return
-    user_id = parts[1].strip()[span_196](start_span)[span_196](end_span)
-    if not user_id.lstrip("-").isdigit():[span_197](start_span)[span_197](end_span)
-        bot.send_message(ADMIN_ID, "⚠️ Invalid Chat ID.")[span_198](start_span)[span_198](end_span)
+    user_id = parts[1].strip()[span_165](start_span)[span_165](end_span)
+    if not user_id.lstrip("-").isdigit():[span_166](start_span)[span_166](end_span)
+        bot.send_message(ADMIN_ID, "⚠️ Invalid Chat ID.")
         return
-    data = load_data()[span_199](start_span)[span_199](end_span)
-    if user_id not in data.get("users", {}):[span_200](start_span)[span_200](end_span)
-        if user_id == PROTECTED_USER_ID:[span_201](start_span)[span_201](end_span)
-            ensure_protected_user(data)[span_202](start_span)[span_202](end_span)
-            save_data(data)[span_203](start_span)[span_203](end_span)
+    data = load_data()[span_167](start_span)[span_167](end_span)
+    if user_id not in data.get("users", {}):[span_168](start_span)[span_168](end_span)
+        if user_id == PROTECTED_USER_ID:[span_169](start_span)[span_169](end_span)
+            ensure_protected_user(data)[span_170](start_span)[span_170](end_span)
+            save_data(data)[span_171](start_span)[span_171](end_span)
         else:
             bot.send_message(ADMIN_ID, f"⚠️ User <code>{user_id}</code> is not registered.")
             return
-    u = data["users"].get(user_id, {})[span_204](start_span)[span_204](end_span)
-    if user_id in data["blocked"]:[span_205](start_span)[span_205](end_span)
-        status = "⛔ Banned[span_206](start_span)"[span_206](end_span)
-    elif user_id in data["alerts"]:[span_207](start_span)[span_207](end_span)
-        status = "🚨 Alert[span_208](start_span)"[span_208](end_span)
+    u = data["users"].get(user_id, {})[span_172](start_span)[span_172](end_span)
+    if user_id in data["blocked"]:[span_173](start_span)[span_173](end_span)
+        status = "⛔ Banned[span_174](start_span)"[span_174](end_span)
+    elif user_id in data["alerts"]:[span_175](start_span)[span_175](end_span)
+        status = "🚨 Alert[span_176](start_span)"[span_176](end_span)
     elif user_id == PROTECTED_USER_ID:
         status = "🛡️ Protected"
     else:
-        status = "🟢 Active[span_209](start_span)"[span_209](end_span)
-    link = f"tg://user?id={user_id}[span_210](start_span)"[span_210](end_span)
-    text = (f"👤 <b>USER PROFILE</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 <b>Chat ID:</b> <code>{user_id}</code>\n📊 <b>Status:</b> {status}\n💬 <b>User Messages:</b> {len(u.get('user_msgs', []))}\n📨 <b>Admin Messages:</b> {len(u.get('admin_msgs', []))}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n<a href=\"{link}\">🔗 OPEN TELEGRAM PROFILE</a>")[span_211](start_span)[span_211](end_span)
-    bot.send_message(ADMIN_ID, text, disable_web_page_preview=True)[span_212](start_span)[span_212](end_span)
+        status = "🟢 Active[span_177](start_span)"[span_177](end_span)
+    link = f"tg://user?id={user_id}[span_178](start_span)"[span_178](end_span)
+    text = (f"👤 <b>USER PROFILE</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 <b>Chat ID:</b> <code>{user_id}</code>\n📊 <b>Status:</b> {status}\n💬 <b>User Messages:</b> {len(u.get('user_msgs', []))}\n📨 <b>Admin Messages:</b> {len(u.get('admin_msgs', []))}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n<a href=\"{link}\">🔗 OPEN TELEGRAM PROFILE</a>")[span_179](start_span)[span_179](end_span)
+    bot.send_message(ADMIN_ID, text, disable_web_page_preview=True)[span_180](start_span)[span_180](end_span)
 
 # ============================================================
 # CORE ROUTING ENGINE
 # ============================================================
 
-@bot.message_handler(func=lambda message: True, content_types=SUPPORTED_TYPES)[span_213](start_span)[span_213](end_span)
+@bot.message_handler(func=lambda message: True, content_types=SUPPORTED_TYPES)[span_181](start_span)[span_181](end_span)
 def handle_all_messages(message):
-    chat_id = message.chat.id[span_214](start_span)[span_214](end_span)
-    message_id = message.message_id[span_215](start_span)[span_215](end_span)
-    data = load_data()[span_216](start_span)[span_216](end_span)
+    chat_id = message.chat.id[span_182](start_span)[span_182](end_span)
+    message_id = message.message_id[span_183](start_span)[span_183](end_span)
+    data = load_data()[span_184](start_span)[span_184](end_span)
 
     # ADMIN -> USER
-    if chat_id == ADMIN_ID:[span_217](start_span)[span_217](end_span)
-        target_user = None[span_218](start_span)[span_218](end_span)
-        target_quote_id = None[span_219](start_span)[span_219](end_span)
-        if message.reply_to_message:[span_220](start_span)[span_220](end_span)
-            replied_admin_id = str(message.reply_to_message.message_id)[span_221](start_span)[span_221](end_span)
-            target_user = data["reply_map"].get(replied_admin_id)[span_222](start_span)[span_222](end_span)
+    if chat_id == ADMIN_ID:[span_185](start_span)[span_185](end_span)
+        target_user = None[span_186](start_span)[span_186](end_span)
+        target_quote_id = None[span_187](start_span)[span_187](end_span)
+        if message.reply_to_message:[span_188](start_span)[span_188](end_span)
+            replied_admin_id = str(message.reply_to_message.message_id)[span_189](start_span)[span_189](end_span)
+            target_user = data["reply_map"].get(replied_admin_id)[span_190](start_span)[span_190](end_span)
             if target_user:
-                target_quote_id = data["msg_map_a2u"].get(replied_admin_id)[span_223](start_span)[span_223](end_span)
-        elif data.get("selected_user"):[span_224](start_span)[span_224](end_span)
-            target_user = str(data["selected_user"])[span_225](start_span)[span_225](end_span)
+                target_quote_id = data["msg_map_a2u"].get(replied_admin_id)[span_191](start_span)[span_191](end_span)
+        elif data.get("selected_user"):[span_192](start_span)[span_192](end_span)
+            target_user = str(data["selected_user"])[span_193](start_span)[span_193](end_span)
 
-        if not target_user:[span_226](start_span)[span_226](end_span)
-            bot.send_message(ADMIN_ID, "⚠️ <b>Action Required:</b> Reply directly to a user's forwarded message, or use <code>/select &lt;user_id&gt;</code>.")[span_227](start_span)[span_227](end_span)
+        if not target_user:[span_194](start_span)[span_194](end_span)
+            bot.send_message(ADMIN_ID, "⚠️ <b>Action Required:</b> Reply directly to a user's forwarded message, or use <code>/select &lt;user_id&gt;</code>.")[span_195](start_span)[span_195](end_span)
             return
 
-        target_user = str(target_user)[span_228](start_span)[span_228](end_span)
-        if target_user in data["blocked"]:[span_229](start_span)[span_229](end_span)
-            bot.send_message(ADMIN_ID, "⛔ Delivery failed: User is blocked.")[span_230](start_span)[span_230](end_span)
+        target_user = str(target_user)[span_196](start_span)[span_196](end_span)
+        if target_user in data["blocked"]:[span_197](start_span)[span_197](end_span)
+            bot.send_message(ADMIN_ID, "⛔ Delivery failed: User is blocked.")[span_198](start_span)[span_198](end_span)
             return
 
-        # /secret PHOTO TO FAKE THUMBNAIL VIDEO
         caption = message.caption or ""
         if message.content_type == "photo" and caption.strip().lower() == "/secret":
             bot.send_message(ADMIN_ID, "⏳ Processing started: Fake thumbnail video create ho rahi hai...")
@@ -747,13 +748,13 @@ def handle_all_messages(message):
                     "from_chat_id": ADMIN_ID,
                     "message_id": message_id,
                     "protect_content": True
-                }[span_231](start_span)[span_231](end_span)
-                if target_quote_id:[span_232](start_span)[span_232](end_span)
-                    args["reply_to_message_id"] = int(target_quote_id)[span_233](start_span)[span_233](end_span)
-                sent = bot.copy_message(**args)[span_234](start_span)[span_234](end_span)
+                }[span_199](start_span)[span_199](end_span)
+                if target_quote_id:[span_200](start_span)[span_200](end_span)
+                    args["reply_to_message_id"] = int(target_quote_id)[span_201](start_span)[span_201](end_span)
+                sent = bot.copy_message(**args)[span_202](start_span)[span_202](end_span)
 
-            ensure_user(data, target_user)[span_235](start_span)[span_235](end_span)
-            data["users"][target_user]["admin_msgs"].append(sent.message_id)[span_236](start_span)[span_236](end_span)
+            ensure_user(data, target_user)[span_203](start_span)[span_203](end_span)
+            data["users"][target_user]["admin_msgs"].append(sent.message_id)[span_204](start_span)[span_204](end_span)
 
             data.setdefault("auto_delete", []).append({
                 "chat_id": int(target_user),
@@ -761,58 +762,58 @@ def handle_all_messages(message):
                 "delete_at": time.time() + AUTO_DELETE_SECONDS
             })
 
-            admin_id = str(message_id)[span_237](start_span)[span_237](end_span)
-            user_message_id = str(sent.message_id)[span_238](start_span)[span_238](end_span)
-            data["reply_map"][admin_id] = target_user[span_239](start_span)[span_239](end_span)
-            data["msg_map_a2u"][admin_id] = sent.message_id[span_240](start_span)[span_240](end_span)
-            data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = message_id[span_241](start_span)[span_241](end_span)
-            save_data(data)[span_242](start_span)[span_242](end_span)
+            admin_id = str(message_id)[span_205](start_span)[span_205](end_span)
+            user_message_id = str(sent.message_id)[span_206](start_span)[span_206](end_span)
+            data["reply_map"][admin_id] = target_user[span_207](start_span)[span_207](end_span)
+            data["msg_map_a2u"][admin_id] = sent.message_id[span_208](start_span)[span_208](end_span)
+            data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = message_id[span_209](start_span)[span_209](end_span)
+            save_data(data)[span_210](start_span)[span_210](end_span)
         except Exception as e:
-            logging.error("Admin -> User routing error: %s", e)[span_243](start_span)[span_243](end_span)
-            bot.send_message(ADMIN_ID, "❌ <b>Send Failed.</b>")[span_244](start_span)[span_244](end_span)
+            logging.error("Admin -> User routing error: %s", e)[span_211](start_span)[span_211](end_span)
+            bot.send_message(ADMIN_ID, "❌ <b>Send Failed.</b>")[span_212](start_span)[span_212](end_span)
         return
 
     # USER -> ADMIN
-    user_id = str(chat_id)[span_245](start_span)[span_245](end_span)
-    if user_id in data["blocked"]:[span_246](start_span)[span_246](end_span)
+    user_id = str(chat_id)[span_213](start_span)[span_213](end_span)
+    if user_id in data["blocked"]:[span_214](start_span)[span_214](end_span)
         return
-    ensure_user(data, user_id)[span_247](start_span)[span_247](end_span)
-    data["users"][user_id]["user_msgs"].append(message_id)[span_248](start_span)[span_248](end_span)
+    ensure_user(data, user_id)[span_215](start_span)[span_215](end_span)
+    data["users"][user_id]["user_msgs"].append(message_id)[span_216](start_span)[span_216](end_span)
 
-    reply_to_admin_msg_id = None[span_249](start_span)[span_249](end_span)
-    if message.reply_to_message:[span_250](start_span)[span_250](end_span)
-        replied_user_msg_id = message.reply_to_message.message_id[span_251](start_span)[span_251](end_span)
-        lookup_key = f"{user_id}_{replied_user_msg_id}[span_252](start_span)"[span_252](end_span)
-        reply_to_admin_msg_id = data["msg_map_u2a"].get(lookup_key)[span_253](start_span)[span_253](end_span)
+    reply_to_admin_msg_id = None[span_217](start_span)[span_217](end_span)
+    if message.reply_to_message:[span_218](start_span)[span_218](end_span)
+        replied_user_msg_id = message.reply_to_message.message_id[span_219](start_span)[span_219](end_span)
+        lookup_key = f"{user_id}_{replied_user_msg_id}[span_220](start_span)"[span_220](end_span)
+        reply_to_admin_msg_id = data["msg_map_u2a"].get(lookup_key)[span_221](start_span)[span_221](end_span)
 
     try:
-        copied = bot.forward_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id)[span_254](start_span)[span_254](end_span)
-        admin_message_id = copied.message_id[span_255](start_span)[span_255](end_span)
+        copied = bot.forward_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id)[span_222](start_span)[span_222](end_span)
+        admin_message_id = copied.message_id[span_223](start_span)[span_223](end_span)
 
-        if reply_to_admin_msg_id:[span_256](start_span)[span_256](end_span)
+        if reply_to_admin_msg_id:[span_224](start_span)[span_224](end_span)
             try:
-                bot.copy_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id, reply_to_message_id=int(reply_to_admin_msg_id))[span_257](start_span)[span_257](end_span)
+                bot.copy_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id, reply_to_message_id=int(reply_to_admin_msg_id))[span_225](start_span)[span_225](end_span)
                 try:
-                    bot.delete_message(chat_id=ADMIN_ID, message_id=admin_message_id)[span_258](start_span)[span_258](end_span)
-                    admin_message_id = admin_message_id + 1[span_259](start_span)[span_259](end_span)
+                    bot.delete_message(chat_id=ADMIN_ID, message_id=admin_message_id)[span_226](start_span)[span_226](end_span)
+                    admin_message_id = admin_message_id + 1[span_227](start_span)[span_227](end_span)
                 except Exception:
-                    pass[span_260](start_span)[span_260](end_span)
+                    pass[span_228](start_span)[span_228](end_span)
             except Exception:
-                pass[span_261](start_span)[span_261](end_span)
+                pass[span_229](start_span)[span_229](end_span)
 
-        data["reply_map"][str(admin_message_id)] = user_id[span_262](start_span)[span_262](end_span)
-        data["msg_map_a2u"][str(admin_message_id)] = message_id[span_263](start_span)[span_263](end_span)
-        data["msg_map_u2a"][f"{user_id}_{message_id}"] = admin_message_id[span_264](start_span)[span_264](end_span)
+        data["reply_map"][str(admin_message_id)] = user_id[span_230](start_span)[span_230](end_span)
+        data["msg_map_a2u"][str(admin_message_id)] = message_id[span_231](start_span)[span_231](end_span)
+        data["msg_map_u2a"][f"{user_id}_{message_id}"] = admin_message_id[span_232](start_span)[span_232](end_span)
 
-        if user_id in data["alerts"]:[span_265](start_span)[span_265](end_span)
+        if user_id in data["alerts"]:[span_233](start_span)[span_233](end_span)
             try:
-                bot.send_message(ADMIN_ID, f"🚨 <b>ALERT: Flagged User Active</b>\n👤 <code>{user_id}</code>", reply_to_message_id=admin_message_id)[span_266](start_span)[span_266](end_span)
+                bot.send_message(ADMIN_ID, f"🚨 <b>ALERT: Flagged User Active</b>\n👤 <code>{user_id}</code>", reply_to_message_id=admin_message_id)[span_234](start_span)[span_234](end_span)
             except Exception:
-                pass[span_267](start_span)[span_267](end_span)
+                pass[span_235](start_span)[span_235](end_span)
 
-        save_data(data)[span_268](start_span)[span_268](end_span)
+        save_data(data)[span_236](start_span)[span_236](end_span)
     except Exception as e:
-        logging.error("Inbound routing error: %s", e)[span_269](start_span)[span_269](end_span)
+        logging.error("Inbound routing error: %s", e)[span_237](start_span)[span_237](end_span)
 
 # ============================================================
 # REACTION & EDIT SYNC
@@ -820,99 +821,99 @@ def handle_all_messages(message):
 
 def _reaction_to_payload(reaction):
     try:
-        if reaction.type == "emoji":[span_270](start_span)[span_270](end_span)
-            return {"type": "emoji", "emoji": reaction.emoji}[span_271](start_span)[span_271](end_span)
-        if reaction.type == "custom_emoji":[span_272](start_span)[span_272](end_span)
-            return {"type": "custom_emoji", "custom_emoji_id": reaction.custom_emoji_id}[span_273](start_span)[span_273](end_span)
-    except Exception:[span_274](start_span)[span_274](end_span)
-        pass[span_275](start_span)[span_275](end_span)
-    return None[span_276](start_span)[span_276](end_span)
+        if reaction.type == "emoji":[span_238](start_span)[span_238](end_span)
+            return {"type": "emoji", "emoji": reaction.emoji}[span_239](start_span)[span_239](end_span)
+        if reaction.type == "custom_emoji":[span_240](start_span)[span_240](end_span)
+            return {"type": "custom_emoji", "custom_emoji_id": reaction.custom_emoji_id}[span_241](start_span)[span_241](end_span)
+    except Exception:[span_242](start_span)[span_242](end_span)
+        pass[span_243](start_span)[span_243](end_span)
+    return None[span_244](start_span)[span_244](end_span)
 
 def _mirror_reaction_to_other_side(source_chat_id, source_message_id, reaction_items, is_user_side):
-    data = load_data()[span_277](start_span)[span_277](end_span)
-    source_message_id = int(source_message_id)[span_278](start_span)[span_278](end_span)
-    if is_user_side:[span_279](start_span)[span_279](end_span)
-        user_id = str(source_chat_id)[span_280](start_span)[span_280](end_span)
-        counterpart = data["msg_map_u2a"].get(f"{user_id}_{source_message_id}")[span_281](start_span)[span_281](end_span)
-        target_chat_id = ADMIN_ID[span_282](start_span)[span_282](end_span)
+    data = load_data()[span_245](start_span)[span_245](end_span)
+    source_message_id = int(source_message_id)[span_246](start_span)[span_246](end_span)
+    if is_user_side:[span_247](start_span)[span_247](end_span)
+        user_id = str(source_chat_id)[span_248](start_span)[span_248](end_span)
+        counterpart = data["msg_map_u2a"].get(f"{user_id}_{source_message_id}")[span_249](start_span)[span_249](end_span)
+        target_chat_id = ADMIN_ID[span_250](start_span)[span_250](end_span)
     else:
-        counterpart = data["msg_map_a2u"].get(str(source_message_id))[span_283](start_span)[span_283](end_span)
-        target_user = data["reply_map"].get(str(source_message_id))[span_284](start_span)[span_284](end_span)
-        if not target_user:[span_285](start_span)[span_285](end_span)
+        counterpart = data["msg_map_a2u"].get(str(source_message_id))[span_251](start_span)[span_251](end_span)
+        target_user = data["reply_map"].get(str(source_message_id))[span_252](start_span)[span_252](end_span)
+        if not target_user:[span_253](start_span)[span_253](end_span)
             return
-        target_chat_id = int(target_user)[span_286](start_span)[span_286](end_span)
-    if not counterpart:[span_287](start_span)[span_287](end_span)
+        target_chat_id = int(target_user)[span_254](start_span)[span_254](end_span)
+    if not counterpart:[span_255](start_span)[span_255](end_span)
         return
     try:
-        bot.set_message_reaction(chat_id=target_chat_id, message_id=int(counterpart), reaction=[])[span_288](start_span)[span_288](end_span)
-    except Exception as e:[span_289](start_span)[span_289](end_span)
-        logging.warning("Could not clear mirrored reaction: %s", e)[span_290](start_span)[span_290](end_span)
-    if not reaction_items:[span_291](start_span)[span_291](end_span)
+        bot.set_message_reaction(chat_id=target_chat_id, message_id=int(counterpart), reaction=[])[span_256](start_span)[span_256](end_span)
+    except Exception as e:[span_257](start_span)[span_257](end_span)
+        logging.warning("Could not clear mirrored reaction: %s", e)[span_258](start_span)[span_258](end_span)
+    if not reaction_items:[span_259](start_span)[span_259](end_span)
         return
-    for item in reaction_items:[span_292](start_span)[span_292](end_span)
-        payload = _reaction_to_payload(item)[span_293](start_span)[span_293](end_span)
-        if not payload:[span_294](start_span)[span_294](end_span)
-            continue[span_295](start_span)[span_295](end_span)
+    for item in reaction_items:[span_260](start_span)[span_260](end_span)
+        payload = _reaction_to_payload(item)[span_261](start_span)[span_261](end_span)
+        if not payload:[span_262](start_span)[span_262](end_span)
+            continue[span_263](start_span)[span_263](end_span)
         try:
-            bot.set_message_reaction(chat_id=target_chat_id, message_id=int(counterpart), reaction=[payload])[span_296](start_span)[span_296](end_span)
-            break[span_297](start_span)[span_297](end_span)
-        except Exception as e:[span_298](start_span)[span_298](end_span)
-            logging.warning("Could not mirror reaction: %s", e)[span_299](start_span)[span_299](end_span)
+            bot.set_message_reaction(chat_id=target_chat_id, message_id=int(counterpart), reaction=[payload])[span_264](start_span)[span_264](end_span)
+            break[span_265](start_span)[span_265](end_span)
+        except Exception as e:[span_266](start_span)[span_266](end_span)
+            logging.warning("Could not mirror reaction: %s", e)[span_267](start_span)[span_267](end_span)
 
-if hasattr(bot, "message_reaction_handler"):[span_300](start_span)[span_300](end_span)
-    @bot.message_reaction_handler(func=lambda reaction: True)[span_301](start_span)[span_301](end_span)
+if hasattr(bot, "message_reaction_handler"):[span_268](start_span)[span_268](end_span)
+    @bot.message_reaction_handler(func=lambda reaction: True)[span_269](start_span)[span_269](end_span)
     def handle_message_reaction(reaction):
         try:
-            is_user = (reaction.chat.id != ADMIN_ID)[span_302](start_span)[span_302](end_span)
-            new_reaction = getattr(reaction, "new_reaction", None) or [][span_303](start_span)[span_303](end_span)
-            _mirror_reaction_to_other_side(source_chat_id=reaction.chat.id, source_message_id=reaction.message_id, reaction_items=new_reaction, is_user_side=is_user)[span_304](start_span)[span_304](end_span)
-        except Exception as e:[span_305](start_span)[span_305](end_span)
-            logging.error("Reaction sync error: %s", e)[span_306](start_span)[span_306](end_span)
+            is_user = (reaction.chat.id != ADMIN_ID)[span_270](start_span)[span_270](end_span)
+            new_reaction = getattr(reaction, "new_reaction", None) or [][span_271](start_span)[span_271](end_span)
+            _mirror_reaction_to_other_side(source_chat_id=reaction.chat.id, source_message_id=reaction.message_id, reaction_items=new_reaction, is_user_side=is_user)[span_272](start_span)[span_272](end_span)
+        except Exception as e:[span_273](start_span)[span_273](end_span)
+            logging.error("Reaction sync error: %s", e)[span_274](start_span)[span_274](end_span)
 
-@bot.edited_message_handler(func=lambda message: True, content_types=SUPPORTED_TYPES)[span_307](start_span)[span_307](end_span)
+@bot.edited_message_handler(func=lambda message: True, content_types=SUPPORTED_TYPES)[span_275](start_span)[span_275](end_span)
 def handle_edits(message):
-    chat_id = message.chat.id[span_308](start_span)[span_308](end_span)
-    message_id = message.message_id[span_309](start_span)[span_309](end_span)
-    data = load_data()[span_310](start_span)[span_310](end_span)
-    if chat_id == ADMIN_ID:[span_311](start_span)[span_311](end_span)
-        user_target_msg_id = data["msg_map_a2u"].get(str(message_id))[span_312](start_span)[span_312](end_span)
-        target_user = data["reply_map"].get(str(message_id))[span_313](start_span)[span_313](end_span)
-        if user_target_msg_id and target_user:[span_314](start_span)[span_314](end_span)
+    chat_id = message.chat.id[span_276](start_span)[span_276](end_span)
+    message_id = message.message_id[span_277](start_span)[span_277](end_span)
+    data = load_data()[span_278](start_span)[span_278](end_span)
+    if chat_id == ADMIN_ID:[span_279](start_span)[span_279](end_span)
+        user_target_msg_id = data["msg_map_a2u"].get(str(message_id))[span_280](start_span)[span_280](end_span)
+        target_user = data["reply_map"].get(str(message_id))[span_281](start_span)[span_281](end_span)
+        if user_target_msg_id and target_user:[span_282](start_span)[span_282](end_span)
             try:
-                if message.content_type == "text":[span_315](start_span)[span_315](end_span)
-                    bot.edit_message_text(message.text, int(target_user), int(user_target_msg_id))[span_316](start_span)[span_316](end_span)
-            except Exception:[span_317](start_span)[span_317](end_span)
-                pass[span_318](start_span)[span_318](end_span)
+                if message.content_type == "text":[span_283](start_span)[span_283](end_span)
+                    bot.edit_message_text(message.text, int(target_user), int(user_target_msg_id))[span_284](start_span)[span_284](end_span)
+            except Exception:[span_285](start_span)[span_285](end_span)
+                pass[span_286](start_span)[span_286](end_span)
         return
-    user_id = str(chat_id)[span_319](start_span)[span_319](end_span)
-    admin_ref_id = data["msg_map_u2a"].get(f"{user_id}_{message_id}")[span_320](start_span)[span_320](end_span)
-    if admin_ref_id:[span_321](start_span)[span_321](end_span)
+    user_id = str(chat_id)[span_287](start_span)[span_287](end_span)
+    admin_ref_id = data["msg_map_u2a"].get(f"{user_id}_{message_id}")[span_288](start_span)[span_288](end_span)
+    if admin_ref_id:[span_289](start_span)[span_289](end_span)
         try:
-            if message.content_type == "text":[span_322](start_span)[span_322](end_span)
-                bot.send_message(ADMIN_ID, f"✏️ <b>[User Edited Message]</b>\n\n{message.text}", reply_to_message_id=int(admin_ref_id))[span_323](start_span)[span_323](end_span)
-        except Exception:[span_324](start_span)[span_324](end_span)
-            pass[span_325](start_span)[span_325](end_span)
+            if message.content_type == "text":[span_290](start_span)[span_290](end_span)
+                bot.send_message(ADMIN_ID, f"✏️ <b>[User Edited Message]</b>\n\n{message.text}", reply_to_message_id=int(admin_ref_id))[span_291](start_span)[span_291](end_span)
+        except Exception:[span_292](start_span)[span_292](end_span)
+            pass[span_293](start_span)[span_293](end_span)
 
 # ============================================================
 # START SERVICES WITH 409 RESILIENCE
 # ============================================================
 
 def start_services():
-    data = load_data()[span_326](start_span)[span_326](end_span)
-    ensure_protected_user(data)[span_327](start_span)[span_327](end_span)
-    save_data(data)[span_328](start_span)[span_328](end_span)
+    data = load_data()[span_294](start_span)[span_294](end_span)
+    ensure_protected_user(data)[span_295](start_span)[span_295](end_span)
+    save_data(data)[span_296](start_span)[span_296](end_span)
 
-    threading.Thread(target=run_flask, daemon=True).start()[span_329](start_span)[span_329](end_span)
+    threading.Thread(target=run_flask, daemon=True).start()[span_297](start_span)[span_297](end_span)
     threading.Thread(target=auto_delete_worker, daemon=True).start()
     threading.Thread(target=continuous_reblur_daemon, daemon=True).start()
     logging.info("Core Gateway Server Running with Video Converter, Auto-Delete & Reblur...")
 
     try:
-        bot.delete_webhook(drop_pending_updates=True)[span_330](start_span)[span_330](end_span)
-        bot.remove_webhook()[span_331](start_span)[span_331](end_span)
-        logging.info("Webhook cleared, waiting 5 sec to resolve instance conflicts...")[span_332](start_span)[span_332](end_span)
+        bot.delete_webhook(drop_pending_updates=True)[span_298](start_span)[span_298](end_span)
+        bot.remove_webhook()[span_299](start_span)[span_299](end_span)
+        logging.info("Webhook cleared, waiting 5 sec to resolve instance conflicts...")[span_300](start_span)[span_300](end_span)
     except Exception as e:
-        logging.warning(f"Webhook clear warning: {e}")[span_333](start_span)[span_333](end_span)
+        logging.warning(f"Webhook clear warning: {e}")[span_301](start_span)[span_301](end_span)
 
     time.sleep(5)
 
