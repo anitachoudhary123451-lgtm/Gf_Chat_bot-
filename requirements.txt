@@ -2,5 +2,6 @@ pyTelegramBotAPI>=4.14.0
 Flask>=3.0.0
 gunicorn>=21.2.0
 Pillow>=10.0.0
-moviepy>=1.0.3
+moviepy==1.0.3
 imageio-ffmpeg>=0.4.9
+decorator>=4.4.2
