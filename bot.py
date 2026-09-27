@@ -19,7 +19,6 @@ PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
 
 DATA_FILE = "bot_data.json"
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
-REBLUR_INTERVAL_SECONDS = 5     # Har 5 second me fresh blur replace
 
 if not TOKEN:
     raise RuntimeError("BOT_TOKEN environment variable is not set!")
@@ -34,9 +33,6 @@ except ValueError:
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 db_lock = Lock()
-
-active_spoilers = {}
-active_spoilers_lock = Lock()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
@@ -74,8 +70,11 @@ def ensure_user(data, user_id):
     if user_id not in data["users"]:
         data["users"][user_id] = {
             "admin_msgs": [],
-            "user_msgs": []
+            "user_msgs": [],
+            "auto_delete_enabled": True
         }
+    elif "auto_delete_enabled" not in data["users"][user_id]:
+        data["users"][user_id]["auto_delete_enabled"] = True
 
 def ensure_protected_user(data):
     if PROTECTED_USER_ID:
@@ -116,47 +115,6 @@ def save_data(data):
 SUPPORTED_TYPES = ["text", "photo", "video", "document", "audio", "voice", "sticker", "animation"]
 
 # ============================================================
-# CONTINUOUS RE-BLUR LOOP
-# ============================================================
-
-def continuous_reblur_daemon():
-    while True:
-        try:
-            time.sleep(REBLUR_INTERVAL_SECONDS)
-            with active_spoilers_lock:
-                items = list(active_spoilers.items())
-
-            for (chat_id, message_id), media_info in items:
-                try:
-                    if media_info["type"] == "photo":
-                        bot.edit_message_media(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            media=InputMediaPhoto(
-                                media=media_info["file_id"],
-                                caption=media_info["caption"],
-                                has_spoiler=True
-                            )
-                        )
-                    elif media_info["type"] == "video":
-                        bot.edit_message_media(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            media=InputMediaVideo(
-                                media=media_info["file_id"],
-                                caption=media_info["caption"],
-                                has_spoiler=True
-                            )
-                        )
-                except Exception as e:
-                    err_text = str(e).lower()
-                    if "message to edit not found" in err_text or "message can't be edited" in err_text:
-                        with active_spoilers_lock:
-                            active_spoilers.pop((chat_id, message_id), None)
-        except Exception as e:
-            logging.error("Continuous reblur loop error: %s", e)
-
-# ============================================================
 # BACKGROUND AUTO-DELETE WORKER (6 GHANTE)
 # ============================================================
 
@@ -181,8 +139,6 @@ def auto_delete_worker():
                         bot.delete_message(chat_id=cid, message_id=mid)
                     except Exception:
                         pass
-                    with active_spoilers_lock:
-                        active_spoilers.pop((cid, mid), None)
                     modified = True
                 else:
                     remaining.append(item)
@@ -220,6 +176,7 @@ def handle_start(message):
 • <code>/wipe &lt;id&gt;</code> ── 100% Instant Wipe (User + Admin msgs)
 • <code>/clearall &lt;id&gt;</code> ── Delete Admin msgs
 • <code>/purge &lt;id&gt;</code> ── Wipe all history + mappings
+• <code>/autodelete on/off [id]</code> ── Toggle 6hr auto-delete
 • <code>/resetdb</code> ── Reset DB state
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 <b>MANAGEMENT:</b>
@@ -228,7 +185,7 @@ def handle_start(message):
 • <code>/ban &lt;id&gt;</code> | <code>/unban &lt;id&gt;</code>
 • <code>/alert &lt;id&gt;</code> ── Flag / Unflag
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 <i>Protection: Photos/Videos har thodi der me fresh auto-blur re-lock hoti rehti hain. Screenshots/recordings blocked. 6 hrs auto-delete active.</i>
+🔒 <i>Protection: Photos/Videos automatically blurred once. Screenshots/recordings blocked.</i>
 """
         bot.send_message(ADMIN_ID, panel)
         return
@@ -249,6 +206,46 @@ Aap yahan apna koi bhi message, photo, video ya document bhej sakte hain.
 💬 <i>Apna sandesh niche type karke send karein.</i>
 """
     bot.send_message(chat_id, welcome_text, protect_content=True)
+
+@bot.message_handler(commands=["autodelete"])
+def toggle_autodelete(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/autodelete on|off [user_id]</code>")
+        return
+        
+    action = parts[1].lower()
+    if action not in ["on", "off"]:
+        bot.send_message(ADMIN_ID, "⚠️ Use 'on' or 'off'.")
+        return
+        
+    data = load_data()
+    
+    if len(parts) >= 3:
+        user_id = parts[2]
+    else:
+        user_id = data.get("selected_user")
+        
+    if not user_id:
+        bot.send_message(ADMIN_ID, "⚠️ User ID नहीं मिला। पहले /select करें या कमांड में ID डालें।")
+        return
+        
+    user_id = str(user_id)
+    ensure_user(data, user_id)
+    
+    if action == "off":
+        data["users"][user_id]["auto_delete_enabled"] = False
+        data["auto_delete"] = [item for item in data.get("auto_delete", []) if str(item.get("chat_id")) != user_id]
+        msg = f"🛑 <b>Auto-Delete DISABLED</b> for <code>{user_id}</code>.\n<i>(अब इसके पुराने और नए मैसेजेस 6 घंटे में डिलीट नहीं होंगे)</i>"
+    else:
+        data["users"][user_id]["auto_delete_enabled"] = True
+        msg = f"✅ <b>Auto-Delete ENABLED</b> for <code>{user_id}</code>.\n<i>(नए मैसेजेस 6 घंटे में उड़ने लगेंगे)</i>"
+        
+    save_data(data)
+    bot.send_message(ADMIN_ID, msg)
 
 @bot.message_handler(commands=["wipe"])
 def wipe_chat(message):
@@ -286,8 +283,6 @@ def wipe_chat(message):
             total += 1
         except Exception:
             pass
-        with active_spoilers_lock:
-            active_spoilers.pop((int(user_id), int(msg_id)), None)
 
     data["users"][user_id]["user_msgs"] = []
     data["users"][user_id]["admin_msgs"] = []
@@ -339,18 +334,19 @@ def direct_message(message):
         ensure_user(data, user_id)
         data["users"][user_id]["admin_msgs"].append(sent.message_id)
 
-        data.setdefault("auto_delete", []).append({
-            "chat_id": int(user_id),
-            "message_id": sent.message_id,
-            "delete_at": time.time() + AUTO_DELETE_SECONDS
-        })
+        if data["users"][user_id].get("auto_delete_enabled", True):
+            data.setdefault("auto_delete", []).append({
+                "chat_id": int(user_id),
+                "message_id": sent.message_id,
+                "delete_at": time.time() + AUTO_DELETE_SECONDS
+            })
 
         admin_message_id = str(message.message_id)
         data["reply_map"][admin_message_id] = str(user_id)
         data["msg_map_a2u"][admin_message_id] = sent.message_id
         data["msg_map_u2a"][f"{user_id}_{sent.message_id}"] = message.message_id
         save_data(data)
-        bot.send_message(ADMIN_ID, f"✅ <b>Sent to</b> <code>{user_id}</code> (Protected + Auto-deletes in 6 hrs)")
+        bot.send_message(ADMIN_ID, f"✅ <b>Sent to</b> <code>{user_id}</code> (Protected)")
     except Exception as e:
         logging.error("DM delivery error: %s", e)
         bot.send_message(ADMIN_ID, "❌ <b>Delivery failed.</b>")
@@ -380,8 +376,6 @@ def clear_admin_messages(message):
             count += 1
         except Exception:
             pass
-        with active_spoilers_lock:
-            active_spoilers.pop((int(user_id), int(msg_id)), None)
     data["users"][user_id]["admin_msgs"] = []
     save_data(data)
     bot.send_message(ADMIN_ID, f"🧹 <b>Cleared:</b> {count} Admin messages deleted from <code>{user_id}</code>'s chat.")
@@ -416,8 +410,7 @@ def purge_chat(message):
             total += 1
         except Exception:
             pass
-        with active_spoilers_lock:
-            active_spoilers.pop((int(user_id), int(msg_id)), None)
+            
     reply_map = data.get("reply_map", {})
     msg_map_a2u = data.get("msg_map_a2u", {})
     msg_map_u2a = data.get("msg_map_u2a", {})
@@ -429,7 +422,9 @@ def purge_chat(message):
     for key in list(msg_map_u2a.keys()):
         if key.startswith(prefix):
             msg_map_u2a.pop(key, None)
-    data["users"][user_id] = {"admin_msgs": [], "user_msgs": []}
+    
+    auto_del_state = data["users"][user_id].get("auto_delete_enabled", True)
+    data["users"][user_id] = {"admin_msgs": [], "user_msgs": [], "auto_delete_enabled": auto_del_state}
     data["auto_delete"] = [x for x in data.get("auto_delete", []) if str(x.get("chat_id")) != user_id]
     save_data(data)
     bot.send_message(ADMIN_ID, f"💥 <b>Purge completed.</b>\n\n👤 User: <code>{user_id}</code>\n🗑 Deleted known messages: <b>{total}</b>\n🧹 Routing mappings cleared.")
@@ -438,8 +433,6 @@ def purge_chat(message):
 def reset_database(message):
     if message.chat.id != ADMIN_ID:
         return
-    with active_spoilers_lock:
-        active_spoilers.clear()
     data = empty_db()
     ensure_protected_user(data)
     save_data(data)
@@ -551,8 +544,19 @@ def user_profile(message):
         status = "🛡️ Protected"
     else:
         status = "🟢 Active"
+        
+    auto_del_status = "✅ ON" if u.get("auto_delete_enabled", True) else "🛑 OFF"
+    
     link = f"tg://user?id={user_id}"
-    text = (f"👤 <b>USER PROFILE</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 <b>Chat ID:</b> <code>{user_id}</code>\n📊 <b>Status:</b> {status}\n💬 <b>User Messages:</b> {len(u.get('user_msgs', []))}\n📨 <b>Admin Messages:</b> {len(u.get('admin_msgs', []))}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n<a href=\"{link}\">🔗 OPEN TELEGRAM PROFILE</a>")
+    text = (f"👤 <b>USER PROFILE</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 <b>Chat ID:</b> <code>{user_id}</code>\n"
+            f"📊 <b>Status:</b> {status}\n"
+            f"⏳ <b>Auto-Delete:</b> {auto_del_status}\n"
+            f"💬 <b>User Messages:</b> {len(u.get('user_msgs', []))}\n"
+            f"📨 <b>Admin Messages:</b> {len(u.get('admin_msgs', []))}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<a href=\"{link}\">🔗 OPEN TELEGRAM PROFILE</a>")
     bot.send_message(ADMIN_ID, text, disable_web_page_preview=True)
 
 # ============================================================
@@ -601,13 +605,6 @@ def handle_all_messages(message):
                     protect_content=True,
                     **quote_arg
                 )
-                with active_spoilers_lock:
-                    active_spoilers[(int(target_user), sent.message_id)] = {
-                        "type": "photo",
-                        "file_id": file_id,
-                        "caption": caption
-                    }
-
             elif message.content_type == "video":
                 file_id = message.video.file_id
                 caption = message.caption or ""
@@ -619,13 +616,6 @@ def handle_all_messages(message):
                     protect_content=True,
                     **quote_arg
                 )
-                with active_spoilers_lock:
-                    active_spoilers[(int(target_user), sent.message_id)] = {
-                        "type": "video",
-                        "file_id": file_id,
-                        "caption": caption
-                    }
-
             else:
                 args = {
                     "chat_id": int(target_user),
@@ -640,11 +630,12 @@ def handle_all_messages(message):
             ensure_user(data, target_user)
             data["users"][target_user]["admin_msgs"].append(sent.message_id)
 
-            data.setdefault("auto_delete", []).append({
-                "chat_id": int(target_user),
-                "message_id": sent.message_id,
-                "delete_at": time.time() + AUTO_DELETE_SECONDS
-            })
+            if data["users"][target_user].get("auto_delete_enabled", True):
+                data.setdefault("auto_delete", []).append({
+                    "chat_id": int(target_user),
+                    "message_id": sent.message_id,
+                    "delete_at": time.time() + AUTO_DELETE_SECONDS
+                })
 
             admin_id = str(message_id)
             user_message_id = str(sent.message_id)
@@ -789,8 +780,7 @@ def start_services():
 
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
-    threading.Thread(target=continuous_reblur_daemon, daemon=True).start()
-    logging.info("Core Gateway Server Running with Continuous Reblur Loop...")
+    logging.info("Core Gateway Server Running...")
 
     try:
         bot.delete_webhook(drop_pending_updates=True)
