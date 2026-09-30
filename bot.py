@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import threading
 from threading import Lock
@@ -8,6 +7,7 @@ import time
 from flask import Flask
 import telebot
 from telebot.types import InputMediaPhoto, InputMediaVideo
+from pymongo import MongoClient
 
 # ============================================================
 # ENVIRONMENT & CONFIGURATION
@@ -16,8 +16,8 @@ from telebot.types import InputMediaPhoto, InputMediaVideo
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
+MONGO_URI = os.getenv("MONGO_URI")  # MongoDB URL from Render Env
 
-DATA_FILE = "bot_data.json"
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
 
 if not TOKEN:
@@ -25,6 +25,9 @@ if not TOKEN:
 
 if not ADMIN_ID_RAW:
     raise RuntimeError("ADMIN_ID environment variable is not set!")
+
+if not MONGO_URI:
+    raise RuntimeError("MONGO_URI environment variable is not set! Please add it in Render.")
 
 try:
     ADMIN_ID = int(ADMIN_ID_RAW)
@@ -35,6 +38,20 @@ bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 db_lock = Lock()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
+# ============================================================
+# MONGODB SETUP
+# ============================================================
+try:
+    mongo_client = MongoClient(MONGO_URI)
+    db = mongo_client["telegram_bot_db"]
+    state_collection = db["bot_state"]
+    # Connection test
+    mongo_client.admin.command('ping')
+    logging.info("MongoDB connected successfully!")
+except Exception as e:
+    logging.error(f"MongoDB Connection Error: {e}")
+    raise RuntimeError("Could not connect to MongoDB. Check your MONGO_URI.")
 
 # ============================================================
 # WEB SERVER / KEEP ALIVE
@@ -55,6 +72,7 @@ def run_flask():
 
 def empty_db():
     return {
+        "_id": "master_state",
         "users": {},
         "reply_map": {},
         "msg_map_a2u": {},
@@ -82,16 +100,19 @@ def ensure_protected_user(data):
 
 def load_data():
     with db_lock:
-        if not os.path.exists(DATA_FILE):
-            data = empty_db()
-            ensure_protected_user(data)
-            return data
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = state_collection.find_one({"_id": "master_state"})
+            if not data:
+                data = empty_db()
+                state_collection.insert_one(data)
+                ensure_protected_user(data)
+                return data
+            
+            # Ensure keys exist
             for key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a", "blocked", "alerts"]:
                 if key not in data:
                     data[key] = {} if key in ["users", "reply_map", "msg_map_a2u", "msg_map_u2a"] else []
+            
             data.setdefault("selected_user", None)
             data.setdefault("auto_delete", [])
             ensure_protected_user(data)
@@ -104,11 +125,8 @@ def load_data():
 
 def save_data(data):
     with db_lock:
-        temp_file = DATA_FILE + ".tmp"
         try:
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(temp_file, DATA_FILE)
+            state_collection.replace_one({"_id": "master_state"}, data, upsert=True)
         except Exception as e:
             logging.error("DB Save Error: %s", e)
 
@@ -214,7 +232,7 @@ def toggle_autodelete(message):
     
     parts = message.text.split()
     if len(parts) < 2:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/autodelete on|off [user_id]</code>")
+        bot.send_message(ADMIN_ID, "⚠️️ <b>Format:</b> <code>/autodelete on|off [user_id]</code>")
         return
         
     action = parts[1].lower()
@@ -436,7 +454,7 @@ def reset_database(message):
     data = empty_db()
     ensure_protected_user(data)
     save_data(data)
-    bot.send_message(ADMIN_ID, "♻️ <b>Database Reset:</b> All state logs and mappings cleared.")
+    bot.send_message(ADMIN_ID, "♻️ <b>Database Reset:</b> All state logs and mappings cleared from MongoDB.")
 
 @bot.message_handler(commands=["users"])
 def list_users(message):
@@ -494,7 +512,7 @@ def unban_user(message):
         save_data(data)
         bot.send_message(ADMIN_ID, f"✅ User <code>{user_id}</code> unblocked.")
     else:
-        bot.send_message(ADMIN_ID, "⚠️ User is not blocked.")
+        bot.send_message(ADMIN_ID, "⚠️️ User is not blocked.")
 
 @bot.message_handler(commands=["alert"])
 def toggle_alert(message):
