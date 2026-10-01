@@ -7,7 +7,6 @@ import requests
 
 from flask import Flask
 import telebot
-from telebot.types import InputMediaPhoto, InputMediaVideo
 from pymongo import MongoClient
 
 # ============================================================
@@ -17,8 +16,8 @@ from pymongo import MongoClient
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
-MONGO_URI = os.getenv("MONGO_URI")  # MongoDB URL
-HF_API_KEY = os.getenv("HF_API_KEY") # Naya Hugging Face Token
+MONGO_URI = os.getenv("MONGO_URI")
+HF_API_KEY = os.getenv("HF_API_KEY")
 
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
 
@@ -49,43 +48,51 @@ except Exception as e:
     raise RuntimeError("Could not connect to MongoDB.")
 
 # ============================================================
-# HUGGING FACE AI SETUP (UNIQUE NATURE)
+# HUGGING FACE AI SETUP (UNIQUE NATURE - PURE HINDI)
 # ============================================================
-# Hum Mistral-7B model use kar rahe hain jo Hugging Face par free aur fast hai
 HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
 
 def get_ai_reply(user_text):
     if not HF_API_KEY:
-        return "🌿 Maaf karna, abhi nature shant hai (API Key missing)."
+        return "🌿 तकनीकी समस्या: API Key उपलब्ध नहीं है।"
     
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     
-    # System prompt ko nature, botany aur zoology theme par set kiya hai
+    # Naya aur damdar AI Prompt - Ab shuddh Hindi aur nature gyan ke sath!
     prompt = (
-        f"<s>[INST] You are 'Unique Nature', a highly peaceful and caring AI assistant. "
-        f"You deeply love nature, environment, botany, and zoology. "
-        f"Always reply in short, polite Hinglish (Latin script Hindi). "
-        f"If applicable, softly weave in references to local medicinal plants (like Neem, Tulsi, Ashwagandha) or birds/animals. "
-        f"Use nature emojis like 🌿, 🪴, 🦜. "
-        f"User says: {user_text} [/INST]"
+        "<s>[INST] You are 'Unique Nature', a highly poetic, knowledgeable, and caring AI assistant answering STRICTLY in beautiful, pure Hindi language (Devanagari script). "
+        "Current Context: The real 'Unique Nature' admin/team is currently offline and unavailable to chat. "
+        "Rule 1: Always start your response by politely and beautifully informing the user that the 'Unique Nature' team is currently unavailable, but in the meantime, you are here to talk with them. "
+        "Rule 2: Decorate your responses with nature emojis (🌿, 🌸, 🦜, 🌍, 🪴). "
+        "Rule 3: Answer their queries by weaving in profound thoughts about nature conservation, modern life vs. environment, wildlife, and local medicinal plants. "
+        "Rule 4: If the user insists on talking to the admin, politely tell them to leave their message and the admin will reply as soon as they return. "
+        f"User message: {user_text} [/INST]"
     )
     
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 150, "temperature": 0.7, "return_full_text": False}
+        "parameters": {"max_new_tokens": 500, "temperature": 0.7, "return_full_text": False}
     }
     
     try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=15)
+        # Timeout badha kar 40 sec kar diya hai taki model load ho sake
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=40)
+        
         if response.status_code == 200:
             result = response.json()
-            return result[0]['generated_text'].strip()
+            if isinstance(result, list) and 'generated_text' in result[0]:
+                return result[0]['generated_text'].strip()
+            elif isinstance(result, dict) and 'error' in result:
+                wait_time = result.get('estimated_time', 20)
+                return f"🌿 हमारी प्राकृतिक AI प्रणाली अभी जाग रही है... कृपया लगभग {int(wait_time)} सेकंड प्रतीक्षा करें और अपना संदेश दोबारा भेजें। 🌸"
+        elif response.status_code == 503:
+            return "🌿 हमारी प्राकृतिक AI प्रणाली अभी शुरू हो रही है। कृपया 30 सेकंड बाद दोबारा संदेश भेजें। 🌸"
         else:
             logging.error(f"HF API Error: {response.status_code} - {response.text}")
-            return "🌿 Hawa abhi theek nahi chal rahi, thodi der baad koshish karein (AI Error)."
+            return "🌿 तकनीकी खराबी के कारण अभी जवाब देने में असमर्थ हूँ। कृपया कुछ समय बाद प्रयास करें। 🍂"
     except Exception as e:
         logging.error(f"HF Request Exception: {e}")
-        return "🌿 Abhi prakriti thodi aaram kar rahi hai, baad mein baat karte hain."
+        return "🌿 सर्वर से संपर्क टूट गया है। हमारी AI प्रकृति अभी कनेक्ट हो रही है, कृपया 1 मिनट बाद पुनः प्रयास करें। 🪴"
 
 # ============================================================
 # WEB SERVER
@@ -229,12 +236,10 @@ def handle_start(message):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹 <b>PURGE & DELETION:</b>
 • <code>/wipe &lt;id&gt;</code> ── 100% Instant Wipe
-• <code>/purge &lt;id&gt;</code> ── Wipe all history + mappings
 • <code>/autodelete on/off [id]</code> ── Toggle 6hr auto-delete
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 <b>MANAGEMENT:</b>
 • <code>/users</code> ── List all users
-• <code>/userprofile &lt;id&gt;</code> ── Open profile
 """
         bot.send_message(ADMIN_ID, panel)
         return
@@ -246,13 +251,14 @@ def handle_start(message):
     ensure_user(data, user_id)
     save_data(data)
 
+    # Khubsurat Naya Welcome Message
     welcome_text = """
-🌿 <b>Welcome to Unique Nature!</b>
+🌿 <b>Unique Nature में आपका हार्दिक स्वागत है!</b> 🌿
 <blockquote>
-Prakriti ki shanti me aapka swagat hai. 
-Aap apna message yahan chhod sakte hain, hum jaldi hi aapse judenge.
+प्रकृति की इस शांत और खूबसूरत दुनिया में आपका अभिनंदन।
+पेड़-पौधे, पक्षी, और शुद्ध हवा ही हमारे जीवन का असली धन हैं।
 </blockquote>
-💬 <i>Type your message below.</i>
+💬 <i>अपना संदेश नीचे लिखें, हमारी टीम जल्द ही आपसे जुड़ेगी।</i>
 """
     bot.send_message(chat_id, welcome_text, protect_content=True)
 
@@ -278,57 +284,13 @@ def toggle_ai(message):
     
     if action == "on":
         data["users"][user_id]["ai_mode"] = True
-        msg = f"🌿 <b>AI Nature Mode ENABLED</b> for <code>{user_id}</code>.\n<i>(Ab bot khud inhe nature style me reply dega)</i>"
+        msg = f"🌿 <b>AI Nature Mode ENABLED</b> for <code>{user_id}</code>.\n<i>(Ab bot khud inhe pure Hindi me reply dega)</i>"
     else:
         data["users"][user_id]["ai_mode"] = False
-        msg = f"🛑 <b>AI Nature Mode DISABLED</b> for <code>{user_id}</code>.\n<i>(Auto-reply band)</i>"
+        msg = f"🛑 <b>AI Nature Mode DISABLED</b> for <code>{user_id}</code>."
         
     save_data(data)
     bot.send_message(ADMIN_ID, msg)
-
-@bot.message_handler(commands=["purge"])
-def purge_chat(message):
-    if message.chat.id != ADMIN_ID:
-        return
-    try:
-        user_id = message.text.split()[1]
-    except IndexError:
-        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/purge &lt;user_id&gt;</code>")
-        return
-    user_id = str(user_id)
-    data = load_data()
-    if user_id not in data["users"]:
-        bot.send_message(ADMIN_ID, "⚠️ User history not found.")
-        return
-    user_data = data["users"][user_id]
-    user_msgs = list(user_data.get("user_msgs", []))
-    admin_msgs = list(user_data.get("admin_msgs", []))
-    total = 0
-    for msg_id in user_msgs + admin_msgs:
-        try:
-            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))
-            total += 1
-        except Exception:
-            pass
-            
-    reply_map = data.get("reply_map", {})
-    msg_map_a2u = data.get("msg_map_a2u", {})
-    msg_map_u2a = data.get("msg_map_u2a", {})
-    for admin_id, mapped_user in list(reply_map.items()):
-        if str(mapped_user) == user_id:
-            reply_map.pop(admin_id, None)
-            msg_map_a2u.pop(admin_id, None)
-    prefix = f"{user_id}_"
-    for key in list(msg_map_u2a.keys()):
-        if key.startswith(prefix):
-            msg_map_u2a.pop(key, None)
-    
-    auto_del_state = data["users"][user_id].get("auto_delete_enabled", True)
-    ai_state = data["users"][user_id].get("ai_mode", False)
-    data["users"][user_id] = {"admin_msgs": [], "user_msgs": [], "auto_delete_enabled": auto_del_state, "ai_mode": ai_state}
-    data["auto_delete"] = [x for x in data.get("auto_delete", []) if str(x.get("chat_id")) != user_id]
-    save_data(data)
-    bot.send_message(ADMIN_ID, f"💥 <b>Purge completed.</b>\n👤 User: <code>{user_id}</code>\n🗑 Deleted: <b>{total}</b>")
 
 # ============================================================
 # BLOCK / UNBLOCK TRACKER
@@ -340,7 +302,7 @@ def handle_my_chat_member(message):
     
     if new_status == "kicked":
         try:
-            bot.send_message(ADMIN_ID, f"⚠️ <b>ALERT:</b> User <code>{user_id}</code> ne bot ko abhi BLOCK (Stop) kar diya hai!")
+            bot.send_message(ADMIN_ID, f"⚠️️ <b>ALERT:</b> User <code>{user_id}</code> ne bot ko abhi BLOCK (Stop) kar diya hai!")
         except Exception:
             pass
     elif new_status == "member":
@@ -404,7 +366,6 @@ def handle_all_messages(message):
             data["msg_map_a2u"][admin_id] = sent.message_id
             data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = message_id
             
-            # Agar Admin ne khud reply kiya, to AI mode automatically off krdo
             if data["users"][target_user].get("ai_mode", False):
                 data["users"][target_user]["ai_mode"] = False
                 bot.send_message(ADMIN_ID, f"ℹ️ AI Mode for <code>{target_user}</code> auto-disabled kyunki tumne khud reply kiya.")
@@ -434,7 +395,7 @@ def handle_all_messages(message):
     except Exception as e:
         logging.error(f"Inbound routing error: {e}")
         
-    # 2. AI Auto-Reply Logic (Hugging Face)
+    # 2. AI Auto-Reply Logic
     u_data = data["users"][user_id]
     if u_data.get("ai_mode", False) and message.content_type == "text":
         try:
