@@ -61,7 +61,8 @@ if GEMINI_API_KEY:
             "Agar user sadharan baat kare, toh usme nature ki sundarta, ped-paudho ya shanti ka reference do. "
             "Hamesha polite raho aur hinglish (Latin script hindi) me hi jawab do. Thode green aur nature wale emojis use karo."
         )
-        ai_model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+        # Yahan model ka naam update kiya gaya hai 👇
+        ai_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_prompt)
         logging.info("AI Model 'Unique Nature' initialized successfully!")
     except Exception as e:
         logging.error(f"AI Setup Error: {e}")
@@ -453,7 +454,6 @@ def start_services():
     except: pass
     time.sleep(3)
     
-    # Yahan allowed_updates me 'my_chat_member' add kar diya gaya hai tracker ke liye
     bot.infinity_polling(
         skip_pending=True, 
         allowed_updates=["message", "edited_message", "message_reaction", "my_chat_member"]
