@@ -3,12 +3,12 @@ import logging
 import threading
 from threading import Lock
 import time
+import requests
 
 from flask import Flask
 import telebot
 from telebot.types import InputMediaPhoto, InputMediaVideo
 from pymongo import MongoClient
-import google.generativeai as genai
 
 # ============================================================
 # ENVIRONMENT & CONFIGURATION
@@ -18,7 +18,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB URL
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # Gemini API Key
+HF_API_KEY = os.getenv("HF_API_KEY") # Naya Hugging Face Token
 
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
 
@@ -49,23 +49,43 @@ except Exception as e:
     raise RuntimeError("Could not connect to MongoDB.")
 
 # ============================================================
-# AI SETUP (UNIQUE NATURE)
+# HUGGING FACE AI SETUP (UNIQUE NATURE)
 # ============================================================
-ai_model = None
-if GEMINI_API_KEY:
+# Hum Mistral-7B model use kar rahe hain jo Hugging Face par free aur fast hai
+HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+
+def get_ai_reply(user_text):
+    if not HF_API_KEY:
+        return "🌿 Maaf karna, abhi nature shant hai (API Key missing)."
+    
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    
+    # System prompt ko nature, botany aur zoology theme par set kiya hai
+    prompt = (
+        f"<s>[INST] You are 'Unique Nature', a highly peaceful and caring AI assistant. "
+        f"You deeply love nature, environment, botany, and zoology. "
+        f"Always reply in short, polite Hinglish (Latin script Hindi). "
+        f"If applicable, softly weave in references to local medicinal plants (like Neem, Tulsi, Ashwagandha) or birds/animals. "
+        f"Use nature emojis like 🌿, 🪴, 🦜. "
+        f"User says: {user_text} [/INST]"
+    )
+    
+    payload = {
+        "inputs": prompt,
+        "parameters": {"max_new_tokens": 150, "temperature": 0.7, "return_full_text": False}
+    }
+    
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        system_prompt = (
-            "Tumhara naam 'Unique Nature' hai. Tum ek nature, environment aur wildlife loving AI ho. "
-            "Tumhara tone bahut shant, caring, aur prakriti-premi hona chahiye. "
-            "Agar user sadharan baat kare, toh usme nature ki sundarta, ped-paudho ya shanti ka reference do. "
-            "Hamesha polite raho aur hinglish (Latin script hindi) me hi jawab do. Thode green aur nature wale emojis use karo."
-        )
-        # Yahan model ka naam update kiya gaya hai 👇
-        ai_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_prompt)
-        logging.info("AI Model 'Unique Nature' initialized successfully!")
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=15)
+        if response.status_code == 200:
+            result = response.json()
+            return result[0]['generated_text'].strip()
+        else:
+            logging.error(f"HF API Error: {response.status_code} - {response.text}")
+            return "🌿 Hawa abhi theek nahi chal rahi, thodi der baad koshish karein (AI Error)."
     except Exception as e:
-        logging.error(f"AI Setup Error: {e}")
+        logging.error(f"HF Request Exception: {e}")
+        return "🌿 Abhi prakriti thodi aaram kar rahi hai, baad mein baat karte hain."
 
 # ============================================================
 # WEB SERVER
@@ -414,12 +434,11 @@ def handle_all_messages(message):
     except Exception as e:
         logging.error(f"Inbound routing error: {e}")
         
-    # 2. AI Auto-Reply Logic
+    # 2. AI Auto-Reply Logic (Hugging Face)
     u_data = data["users"][user_id]
-    if u_data.get("ai_mode", False) and ai_model and message.content_type == "text":
+    if u_data.get("ai_mode", False) and message.content_type == "text":
         try:
-            response = ai_model.generate_content(message.text)
-            ai_text = response.text
+            ai_text = get_ai_reply(message.text)
             
             ai_msg = bot.send_message(int(user_id), ai_text, protect_content=True)
             
