@@ -18,7 +18,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 PROTECTED_USER_ID = os.getenv("PROTECTED_USER_ID", "").strip()
 MONGO_URI = os.getenv("MONGO_URI")  # MongoDB URL
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # Naya Gemini API Key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # Gemini API Key
 
 AUTO_DELETE_SECONDS = 6 * 3600  # 6 Ghante me chat se gayab
 
@@ -55,7 +55,6 @@ ai_model = None
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # Nature-favouring system prompt
         system_prompt = (
             "Tumhara naam 'Unique Nature' hai. Tum ek nature, environment aur wildlife loving AI ho. "
             "Tumhara tone bahut shant, caring, aur prakriti-premi hona chahiye. "
@@ -104,7 +103,7 @@ def ensure_user(data, user_id):
             "admin_msgs": [],
             "user_msgs": [],
             "auto_delete_enabled": True,
-            "ai_mode": False  # Naya AI field
+            "ai_mode": False
         }
     else:
         if "auto_delete_enabled" not in data["users"][user_id]:
@@ -236,7 +235,6 @@ Aap apna message yahan chhod sakte hain, hum jaldi hi aapse judenge.
 """
     bot.send_message(chat_id, welcome_text, protect_content=True)
 
-
 @bot.message_handler(commands=["ai"])
 def toggle_ai(message):
     if message.chat.id != ADMIN_ID:
@@ -267,8 +265,68 @@ def toggle_ai(message):
     save_data(data)
     bot.send_message(ADMIN_ID, msg)
 
-# --- BAKI PURANE COMMANDS SAME RAHENGE (WIPE, PURGE, USERS ETC.) ---
-# ... (Wipe, Purge, Ban, Autodelete code goes exactly here like before)
+@bot.message_handler(commands=["purge"])
+def purge_chat(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    try:
+        user_id = message.text.split()[1]
+    except IndexError:
+        bot.send_message(ADMIN_ID, "⚠️ <b>Format:</b> <code>/purge &lt;user_id&gt;</code>")
+        return
+    user_id = str(user_id)
+    data = load_data()
+    if user_id not in data["users"]:
+        bot.send_message(ADMIN_ID, "⚠️ User history not found.")
+        return
+    user_data = data["users"][user_id]
+    user_msgs = list(user_data.get("user_msgs", []))
+    admin_msgs = list(user_data.get("admin_msgs", []))
+    total = 0
+    for msg_id in user_msgs + admin_msgs:
+        try:
+            bot.delete_message(chat_id=int(user_id), message_id=int(msg_id))
+            total += 1
+        except Exception:
+            pass
+            
+    reply_map = data.get("reply_map", {})
+    msg_map_a2u = data.get("msg_map_a2u", {})
+    msg_map_u2a = data.get("msg_map_u2a", {})
+    for admin_id, mapped_user in list(reply_map.items()):
+        if str(mapped_user) == user_id:
+            reply_map.pop(admin_id, None)
+            msg_map_a2u.pop(admin_id, None)
+    prefix = f"{user_id}_"
+    for key in list(msg_map_u2a.keys()):
+        if key.startswith(prefix):
+            msg_map_u2a.pop(key, None)
+    
+    auto_del_state = data["users"][user_id].get("auto_delete_enabled", True)
+    ai_state = data["users"][user_id].get("ai_mode", False)
+    data["users"][user_id] = {"admin_msgs": [], "user_msgs": [], "auto_delete_enabled": auto_del_state, "ai_mode": ai_state}
+    data["auto_delete"] = [x for x in data.get("auto_delete", []) if str(x.get("chat_id")) != user_id]
+    save_data(data)
+    bot.send_message(ADMIN_ID, f"💥 <b>Purge completed.</b>\n👤 User: <code>{user_id}</code>\n🗑 Deleted: <b>{total}</b>")
+
+# ============================================================
+# BLOCK / UNBLOCK TRACKER
+# ============================================================
+@bot.my_chat_member_handler()
+def handle_my_chat_member(message):
+    new_status = message.new_chat_member.status
+    user_id = message.chat.id
+    
+    if new_status == "kicked":
+        try:
+            bot.send_message(ADMIN_ID, f"⚠️ <b>ALERT:</b> User <code>{user_id}</code> ne bot ko abhi BLOCK (Stop) kar diya hai!")
+        except Exception:
+            pass
+    elif new_status == "member":
+        try:
+            bot.send_message(ADMIN_ID, f"✅ <b>INFO:</b> User <code>{user_id}</code> ne bot ko wapas UNBLOCK (Start) kar diya hai!")
+        except Exception:
+            pass
 
 # ============================================================
 # CORE ROUTING ENGINE & AI LOGIC
@@ -280,9 +338,7 @@ def handle_all_messages(message):
     message_id = message.message_id
     data = load_data()
 
-    # ========================================
     # ADMIN -> USER
-    # ========================================
     if chat_id == ADMIN_ID:
         target_user = None
         target_quote_id = None
@@ -326,21 +382,19 @@ def handle_all_messages(message):
             data["reply_map"][admin_id] = target_user
             data["msg_map_a2u"][admin_id] = sent.message_id
             data["msg_map_u2a"][f"{target_user}_{user_message_id}"] = message_id
-            save_data(data)
             
-            # Agar Admin ne khud reply kiya h, to AI mode automatically off krdo (optional safety)
+            # Agar Admin ne khud reply kiya, to AI mode automatically off krdo
             if data["users"][target_user].get("ai_mode", False):
                 data["users"][target_user]["ai_mode"] = False
                 bot.send_message(ADMIN_ID, f"ℹ️ AI Mode for <code>{target_user}</code> auto-disabled kyunki tumne khud reply kiya.")
-                save_data(data)
+            
+            save_data(data)
 
         except Exception as e:
             bot.send_message(ADMIN_ID, "❌ <b>Send Failed.</b>")
         return
 
-    # ========================================
     # USER -> ADMIN & AI REPLY
-    # ========================================
     user_id = str(chat_id)
     if user_id in data["blocked"]:
         return
@@ -363,14 +417,11 @@ def handle_all_messages(message):
     u_data = data["users"][user_id]
     if u_data.get("ai_mode", False) and ai_model and message.content_type == "text":
         try:
-            # Generate AI Response
             response = ai_model.generate_content(message.text)
             ai_text = response.text
             
-            # Send AI reply to User
             ai_msg = bot.send_message(int(user_id), ai_text, protect_content=True)
             
-            # Save AI message in history & autodelete queue
             data["users"][user_id]["admin_msgs"].append(ai_msg.message_id)
             if u_data.get("auto_delete_enabled", True):
                 data.setdefault("auto_delete", []).append({
@@ -378,7 +429,6 @@ def handle_all_messages(message):
                 })
             save_data(data)
             
-            # Inform Admin what AI said
             bot.send_message(ADMIN_ID, f"🤖 <b>[AI replied to {user_id}]:</b>\n\n{ai_text}", reply_to_message_id=admin_message_id)
             
         except Exception as e:
@@ -402,7 +452,12 @@ def start_services():
         bot.remove_webhook()
     except: pass
     time.sleep(3)
-    bot.infinity_polling(skip_pending=True, allowed_updates=["message", "edited_message", "message_reaction"])
+    
+    # Yahan allowed_updates me 'my_chat_member' add kar diya gaya hai tracker ke liye
+    bot.infinity_polling(
+        skip_pending=True, 
+        allowed_updates=["message", "edited_message", "message_reaction", "my_chat_member"]
+    )
 
 if __name__ == "__main__":
     start_services()
